@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% import "_filtros.html" as ff %}
+{% block titulo %}Empresas novas — CNPJ{% endblock %}
+{% block cabecalho %}Empresas novas{% endblock %}
+{% block subtitulo %}Quem apareceu na base desde a atualizacao anterior da Receita.{% endblock %}
+
+{% block conteudo %}
+  <div class="card">
+    {{ ff.formulario('/novidades', f, 'Ver novidades') }}
+  </div>
+
+  {% if erro %}
+    <div class="card"><div class="alerta alerta-erro">{{ erro }}</div></div>
+  {% endif %}
+
+  {% if total is not none %}
+    <div class="card">
+      <div class="resumo">
+        <div>
+          <div class="num">{{ total|milhar }}</div>
+          <div class="label">
+            {% if aproximado %}empresa(s) abertas nos ultimos 6 meses
+            {% else %}empresa(s) nova(s) desde a base anterior{% endif %}
+          </div>
+        </div>
+        {% if total %}
+        <form method="post" action="/exportar" class="acoes" style="margin:0">
+          {% for campo, valor in query.items() %}
+            <input type="hidden" name="{{ campo }}" value="{{ valor }}">
+          {% endfor %}
+          <input type="hidden" name="fonte" value="novidades">
+          <button type="submit" name="formato" value="xlsx" class="primario">Baixar Excel</button>
+          <button type="submit" name="formato" value="csv" class="secundario">Baixar CSV</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if aproximado %}
+        <div class="alerta alerta-aviso">
+          Esta maquina ainda tem só uma versao da base, entao nao ha com o que comparar.
+          Por enquanto a lista mostra quem abriu nos ultimos 6 meses — parecido, mas nao
+          e a mesma coisa. Depois da proxima atualizacao mensal a comparacao fica exata.
+        </div>
+      {% endif %}
+    </div>
+
+    {% if linhas %}
+      <div class="card" style="padding:0">{{ ff.tabela(linhas, mostrar_abertura=true) }}</div>
+    {% endif %}
+  {% endif %}
+{% endblock %}

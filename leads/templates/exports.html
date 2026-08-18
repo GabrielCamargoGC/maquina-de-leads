@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block titulo %}Planilhas — CNPJ{% endblock %}
+{% block cabecalho %}Planilhas{% endblock %}
+{% block subtitulo %}Cada pedido virou um arquivo. Ficam disponiveis por 7 dias.{% endblock %}
+{% block cabeca %}{% if tem_pendente %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+
+{% block conteudo %}
+  {% if destaque %}
+    <div class="card">
+      <div class="alerta alerta-ok">
+        Pedido na fila. Esta pagina se atualiza sozinha — pode deixar aberta e continuar
+        trabalhando; o arquivo aparece aqui quando terminar.
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card" style="padding:0">
+    {% if jobs %}
+    <div class="tabela-rolagem">
+      <table>
+        <thead>
+          <tr><th>Pedido</th><th>Situacao</th><th>Linhas</th><th>Formato</th><th></th></tr>
+        </thead>
+        <tbody>
+        {% for j in jobs %}
+          <tr {% if j.id == destaque %}style="background:#f4f7ff"{% endif %}>
+            <td>
+              <div class="razao">{{ j.descricao or j.id }}</div>
+              <div class="fantasia">{{ j.criado_em.replace('T', ' ') }}</div>
+            </td>
+            <td>
+              {% if j.estado == 'pronto' %}<span class="pill pill-sim">Pronto</span>
+              {% elif j.estado == 'rodando' %}<span class="pill pill-info">Gerando...</span>
+              {% elif j.estado == 'na_fila' %}<span class="pill pill-espera">Na fila</span>
+              {% else %}<span class="pill pill-erro">Erro</span>{% endif %}
+              {% if j.erro %}<div class="fantasia">{{ j.erro }}</div>{% endif %}
+            </td>
+            <td>{{ j.linhas|milhar if j.linhas is not none else '—' }}</td>
+            <td><span class="fantasia">{{ j.formato|upper }}</span></td>
+            <td>
+              {% if j.estado == 'pronto' %}
+                <a class="botao" href="/exports/{{ j.id }}/baixar">Baixar</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div style="padding:20px 24px">
+        <div class="alerta alerta-info">
+          Nenhuma planilha pedida ainda. Faca uma busca e clique em "Baixar Excel".
+        </div>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}

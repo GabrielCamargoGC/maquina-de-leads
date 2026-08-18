@@ -1,0 +1,32 @@
+# dados (nunca no Git - varios GB)
+dados/
+downloads/
+leads_cnpj/cache/
+leads_cnpj/venv/
+leads_cnpj/historico_web/
+*.parquet
+*.zip
+*.db
+
+# segredos
+.env
+# contem a API key do 21st.dev - nunca versionar
+.mcp.json
+*.pem
+credenciais*.json
+
+# python
+.venv/
+__pycache__/
+*.pyc
+
+# lixo de SO
+.DS_Store
+._*
+.fseventsd/
+.Spotlight-V100/
+Thumbs.db
+
+# ferramental local do Claude Code (skills de terceiros, config de maquina)
+.claude/
+logs/

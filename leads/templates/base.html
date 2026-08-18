@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titulo %}Leads CNPJ{% endblock %}</title>
+{% block cabeca %}{% endblock %}
+<style>
+  :root {
+    --accent: #2952e3; --accent-dark: #1c3aa8; --accent-bg: #eef1fd;
+    --bg: #f6f7fb; --card: #ffffff; --border: #e6e8f0;
+    --text: #1c1f2b; --text-muted: #6b7280;
+    --green-bg: #e7f7ee; --green-text: #1a7f4e;
+    --gray-bg: #f1f2f5; --gray-text: #6b7280;
+    --amber-bg: #fff6e0; --amber-text: #92600a;
+    --red-bg: #fdeceb; --red-text: #b13a2f;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text); margin: 0; padding: 32px 20px 60px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  .topo { margin-bottom: 20px; display: flex; justify-content: space-between;
+          align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+  .topo h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .topo p { font-size: 14px; color: var(--text-muted); margin: 0; }
+  nav { display: flex; gap: 16px; align-items: center; }
+  nav a { font-size: 13px; color: var(--accent); text-decoration: none; font-weight: 600; }
+  nav a:hover { text-decoration: underline; }
+  nav a.ativo { color: var(--text); text-decoration: none; cursor: default; }
+
+  .card { background: var(--card); border: 1px solid var(--border);
+          border-radius: var(--radius); padding: 20px 24px; margin-bottom: 20px;
+          box-shadow: 0 1px 2px rgba(20,20,43,0.04); }
+
+  .alerta { border-radius: 8px; padding: 10px 14px; font-size: 13px;
+            margin-top: 12px; display: block; }
+  .alerta-info { background: var(--accent-bg); color: var(--accent-dark); }
+  .alerta-ok { background: var(--green-bg); color: var(--green-text); }
+  .alerta-erro { background: var(--red-bg); color: var(--red-text); white-space: pre-wrap; }
+  .alerta-aviso { background: var(--amber-bg); color: var(--amber-text); }
+
+  .linha-form { display: flex; gap: 16px; flex-wrap: wrap; }
+  .campo { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 150px; }
+  .campo label { font-size: 12px; font-weight: 600; color: var(--text-muted);
+                 text-transform: uppercase; letter-spacing: 0.03em; }
+  .campo input, .campo select {
+    padding: 10px 12px; font-size: 14px; border: 1px solid var(--border);
+    border-radius: 8px; background: #fbfbfd; font-family: inherit; color: inherit;
+  }
+  .campo input:focus, .campo select:focus { outline: none; border-color: var(--accent); background: #fff; }
+  .campo .dica { font-size: 11px; color: var(--text-muted); }
+  .campo.pequeno { max-width: 100px; flex: 0 0 100px; }
+  .campo.medio { max-width: 170px; }
+
+  details.mais { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
+  details.mais summary { font-size: 13px; font-weight: 600; color: var(--accent);
+                        cursor: pointer; user-select: none; }
+  details.mais > div { margin-top: 14px; }
+
+  .checks { display: flex; gap: 18px; margin-top: 16px; align-items: center; flex-wrap: wrap; }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+  .toggle input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+  .acoes { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; align-items: center; }
+  button.primario, button.secundario, a.botao {
+    font-size: 14px; font-weight: 600; padding: 10px 20px; border-radius: 8px;
+    cursor: pointer; border: none; text-decoration: none; display: inline-block;
+    font-family: inherit;
+  }
+  button.primario { background: var(--accent); color: #fff; }
+  button.primario:hover { background: var(--accent-dark); }
+  button.secundario, a.botao { background: var(--accent-bg); color: var(--accent-dark);
+                               border: 1px solid var(--border); }
+  button.secundario:hover, a.botao:hover { background: #e2e6fb; }
+  button:disabled { opacity: .6; cursor: not-allowed; }
+
+  .resumo { display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 12px; }
+  .resumo .num { font-size: 22px; font-weight: 700; }
+  .resumo .label { font-size: 13px; color: var(--text-muted); }
+
+  .tabela-rolagem { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  thead th { text-align: left; font-size: 11px; text-transform: uppercase;
+             letter-spacing: 0.03em; color: var(--text-muted);
+             border-bottom: 1px solid var(--border); padding: 8px 10px; white-space: nowrap; }
+  tbody td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:hover { background: #fafbff; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px;
+          font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .pill-sim { background: var(--green-bg); color: var(--green-text); }
+  .pill-nao { background: var(--gray-bg); color: var(--gray-text); }
+  .pill-info { background: var(--accent-bg); color: var(--accent-dark); }
+  .pill-erro { background: var(--red-bg); color: var(--red-text); }
+  .pill-espera { background: var(--amber-bg); color: var(--amber-text); }
+  .cnae-badge { font-size: 11px; color: var(--text-muted); }
+  .razao { font-weight: 600; }
+  .fantasia { font-size: 12px; color: var(--text-muted); }
+  a.contato { color: var(--accent); text-decoration: none; font-size: 12.5px; }
+  a.contato:hover { text-decoration: underline; }
+  .rodape { font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 28px; }
+  code { background: var(--gray-bg); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="topo">
+    <div>
+      <h1>{% block cabecalho %}Leads CNPJ{% endblock %}</h1>
+      <p>{% block subtitulo %}Dados abertos da Receita Federal.{% endblock %}</p>
+    </div>
+    <nav>
+      <a href="/" class="{{ 'ativo' if pagina == 'busca' }}">Busca</a>
+      <a href="/novidades" class="{{ 'ativo' if pagina == 'novidades' }}">Empresas novas</a>
+      <a href="/exports" class="{{ 'ativo' if pagina == 'exports' }}">Planilhas</a>
+      <a href="/status" class="{{ 'ativo' if pagina == 'status' }}">Base</a>
+    </nav>
+  </div>
+
+  {% if not base_pronta %}
+    <div class="card">
+      <div class="alerta alerta-aviso">
+        A base ainda nao foi carregada nesta maquina. Rode
+        <code>python -m leads.atualizar --forcar</code> ou espere o job das 03:00.
+      </div>
+    </div>
+  {% endif %}
+
+  {% block conteudo %}{% endblock %}
+
+  <div class="rodape">
+    {% if info_base %}
+      Base da Receita: <strong>{{ info_base.referencia or 'desconhecida' }}</strong>
+      &middot; {{ '{:,}'.format(info_base.linhas or 0).replace(',', '.') }} estabelecimentos
+      &middot; atualizada em {{ info_base.atualizada_em or '-' }}
+    {% endif %}
+  </div>
+
+</div>
+</body>
+</html>

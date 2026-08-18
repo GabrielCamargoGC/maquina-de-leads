@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% import "_filtros.html" as ff %}
+{% block titulo %}Busca de leads — CNPJ{% endblock %}
+{% block cabecalho %}Busca de leads{% endblock %}
+{% block subtitulo %}Empresas por cidade, bairro, ramo, porte e Simples/MEI.{% endblock %}
+
+{% block conteudo %}
+  <div class="card">
+    {{ ff.formulario('/', f, 'Buscar') }}
+  </div>
+
+  {% if erro %}
+    <div class="card"><div class="alerta alerta-erro">{{ erro }}</div></div>
+  {% endif %}
+
+  {% if total is not none %}
+    <div class="card">
+      <div class="resumo">
+        <div>
+          <div class="num">{{ total|milhar }}</div>
+          <div class="label">empresa(s) encontrada(s) em {{ '%.2f'|format(segundos) }}s</div>
+        </div>
+        {% if total %}
+        <form method="post" action="/exportar" class="acoes" style="margin:0">
+          {% for campo, valor in query.items() %}
+            <input type="hidden" name="{{ campo }}" value="{{ valor }}">
+          {% endfor %}
+          <input type="hidden" name="fonte" value="busca">
+          <button type="submit" name="formato" value="xlsx" class="primario">Baixar Excel</button>
+          <button type="submit" name="formato" value="csv" class="secundario">Baixar CSV</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if total > linhas|length %}
+        <div class="alerta alerta-info">
+          Mostrando as primeiras {{ linhas|length }} na tela. A planilha traz todas as
+          {{ total|milhar }}.
+        </div>
+      {% endif %}
+    </div>
+
+    {% if linhas %}
+      <div class="card" style="padding:0">{{ ff.tabela(linhas) }}</div>
+    {% else %}
+      <div class="card">
+        <div class="alerta alerta-aviso">
+          Nenhum resultado. O cadastro da Receita nao e padronizado — confira a grafia do
+          bairro, ou tente sem ele para ver a cidade toda.
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock %}

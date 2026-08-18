@@ -1,0 +1,129 @@
+{#
+  Formulario de filtros, compartilhado pela tela de busca e pela de empresas
+  novas -- as duas filtram exatamente as mesmas coisas, so mudam o que fazem
+  com o resultado. Manter um unico formulario evita que um ganhe filtro novo
+  e o outro fique atras.
+#}
+{% macro formulario(acao, f, rotulo_botao) %}
+<form method="get" action="{{ acao }}">
+  <div class="linha-form">
+    <div class="campo">
+      <label>Cidades</label>
+      <input type="text" name="cidades" value="{{ f.cidades_txt }}"
+             placeholder="Assis, Marilia, Ourinhos" required>
+      <span class="dica">Uma ou varias, separadas por virgula</span>
+    </div>
+    <div class="campo pequeno">
+      <label>UF</label>
+      <input type="text" name="uf" value="{{ f.uf or '' }}" maxlength="2" placeholder="SP">
+    </div>
+    <div class="campo">
+      <label>Bairro</label>
+      <input type="text" name="bairro" value="{{ f.bairro or '' }}"
+             placeholder="Cidade toda se vazio">
+    </div>
+    <div class="campo">
+      <label>CNAE ou ramo</label>
+      <input type="text" name="cnae" value="{{ f.cnae or '' }}" placeholder="Ex.: contabilidade">
+    </div>
+  </div>
+
+  <div class="checks">
+    <label class="toggle"><input type="checkbox" name="com_telefone" value="1"
+      {% if f.com_telefone %}checked{% endif %}> Só com telefone</label>
+    <label class="toggle"><input type="checkbox" name="com_email" value="1"
+      {% if f.com_email %}checked{% endif %}> Só com e-mail</label>
+    <label class="toggle"><input type="checkbox" name="apenas_simples" value="1"
+      {% if f.apenas_simples %}checked{% endif %}> Só Simples Nacional</label>
+    <label class="toggle"><input type="checkbox" name="apenas_mei" value="1"
+      {% if f.apenas_mei %}checked{% endif %}> Só MEI</label>
+  </div>
+
+  <details class="mais" {% if f.tem_avancado %}open{% endif %}>
+    <summary>Mais filtros</summary>
+    <div>
+      <div class="linha-form">
+        <div class="campo medio">
+          <label>Porte</label>
+          <select name="porte">
+            <option value="">Qualquer</option>
+            <option value="01" {% if '01' in f.portes %}selected{% endif %}>Micro empresa</option>
+            <option value="03" {% if '03' in f.portes %}selected{% endif %}>Pequeno porte</option>
+            <option value="05" {% if '05' in f.portes %}selected{% endif %}>Demais</option>
+          </select>
+        </div>
+        <div class="campo medio">
+          <label>Capital mínimo</label>
+          <input type="number" name="capital_min" min="0" step="1000"
+                 value="{{ f.capital_min if f.capital_min is not none else '' }}"
+                 placeholder="R$">
+        </div>
+        <div class="campo medio">
+          <label>Aberta de</label>
+          <input type="date" name="aberta_de" value="{{ f.aberta_de or '' }}">
+        </div>
+        <div class="campo medio">
+          <label>Aberta até</label>
+          <input type="date" name="aberta_ate" value="{{ f.aberta_ate or '' }}">
+        </div>
+      </div>
+      <div class="checks">
+        <label class="toggle"><input type="checkbox" name="apenas_matriz" value="1"
+          {% if f.apenas_matriz %}checked{% endif %}> Só matriz (sem filiais)</label>
+        <label class="toggle"><input type="checkbox" name="todas_situacoes" value="1"
+          {% if not f.apenas_ativas %}checked{% endif %}> Incluir baixadas, suspensas e inaptas</label>
+      </div>
+    </div>
+  </details>
+
+  <div class="acoes">
+    <button type="submit" class="primario">{{ rotulo_botao }}</button>
+  </div>
+</form>
+{% endmacro %}
+
+
+{% macro tabela(linhas, mostrar_abertura=false) %}
+<div class="tabela-rolagem">
+  <table>
+    <thead>
+      <tr>
+        <th>Empresa</th><th>CNAE</th><th>Porte</th><th>Simples</th><th>MEI</th>
+        <th>Contato</th><th>Endereço</th>{% if mostrar_abertura %}<th>Aberta em</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for l in linhas %}
+      <tr>
+        <td>
+          <div class="razao">{{ l.razao_social or '(sem razao social)' }}</div>
+          {% if l.nome_fantasia %}<div class="fantasia">{{ l.nome_fantasia }}</div>{% endif %}
+          <div class="fantasia">{{ l.cnpj }} &middot; {{ l.situacao_desc }}</div>
+        </td>
+        <td><span class="cnae-badge">{{ l.cnae_principal }}</span><br>{{ l.cnae_descricao or '' }}</td>
+        <td><span class="fantasia">{{ l.porte_desc or '—' }}</span></td>
+        <td><span class="pill {{ 'pill-sim' if l.optante_simples else 'pill-nao' }}">
+            {{ 'Sim' if l.optante_simples else 'Nao' }}</span></td>
+        <td><span class="pill {{ 'pill-sim' if l.optante_mei else 'pill-nao' }}">
+            {{ 'Sim' if l.optante_mei else 'Nao' }}</span></td>
+        <td>
+          {% if l.telefone_fmt %}
+            <a class="contato" href="tel:{{ l.ddd1 }}{{ l.telefone1 }}">{{ l.telefone_fmt }}</a><br>
+          {% endif %}
+          {% if l.email %}<a class="contato" href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}
+          {% if not l.telefone_fmt and not l.email %}<span class="fantasia">—</span>{% endif %}
+        </td>
+        <td>
+          {{ l.logradouro }}{% if l.numero %}, {{ l.numero }}{% endif %}
+          <br><span class="fantasia">{{ l.bairro }} &middot; {{ l.municipio }}/{{ l.uf }}</span>
+        </td>
+        {% if mostrar_abertura %}
+          <td><span class="fantasia">
+            {{ l.data_abertura.strftime('%d/%m/%Y') if l.data_abertura else '—' }}</span></td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}

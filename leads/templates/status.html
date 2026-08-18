@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block titulo %}Base — CNPJ{% endblock %}
+{% block cabecalho %}Base de dados{% endblock %}
+{% block subtitulo %}De onde vem o dado e quando foi atualizado.{% endblock %}
+
+{% block conteudo %}
+  <div class="card">
+    <div class="tabela-rolagem">
+      <table>
+        <tbody>
+          {% for rotulo, valor in itens %}
+            <tr><td style="width:34%"><strong>{{ rotulo }}</strong></td><td>{{ valor }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="alerta alerta-info">
+      A Receita publica dados novos <strong>1x por mes</strong>. O job das 03:00 confere
+      todo dia e só baixa quando aparece pasta nova — por isso a base nunca fica atrasada,
+      e nos outros dias nao gasta banda nenhuma.
+    </div>
+  </div>
+
+  {% if ufs %}
+  <div class="card" style="padding:0">
+    <div class="tabela-rolagem">
+      <table>
+        <thead><tr><th>UF</th><th>Municipios</th><th>Estabelecimentos</th></tr></thead>
+        <tbody>
+        {% for uf, mun, qtd in ufs %}
+          <tr><td><strong>{{ uf }}</strong></td>
+              <td>{{ mun|milhar }}</td>
+              <td>{{ qtd|milhar }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}

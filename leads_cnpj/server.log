@@ -1,0 +1,10 @@
+ * Serving Flask app 'app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5050
+Press CTRL+C to quit
+127.0.0.1 - - [16/Jul/2026 19:00:49] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [16/Jul/2026 19:00:49] "GET /?cidade=Sao+Paulo&uf=SP&bairro=Pinheiros HTTP/1.1" 200 -
+127.0.0.1 - - [16/Jul/2026 19:00:49] "GET /csv?cidade=Sao+Paulo&uf=SP&bairro=Pinheiros HTTP/1.1" 200 -
+127.0.0.1 - - [16/Jul/2026 19:00:49] "GET /?cidade=Sao+Paulo&uf=SP&bairro=BairroFake HTTP/1.1" 200 -
+127.0.0.1 - - [16/Jul/2026 19:00:49] "GET /?cidade=CidadeErrada&uf=SP&bairro=Pinheiros HTTP/1.1" 200 -
