@@ -24,7 +24,7 @@ Folgado para esta carga. Ver [Dimensionamento](#dimensionamento).
 ## 1. Trazer o código
 
 ```powershell
-git clone https://github.com/SEU_USUARIO/maquina-de-leads C:\leads
+git clone https://github.com/GabrielCamargoGC/maquina-de-leads C:\leads
 cd C:\leads
 ```
 

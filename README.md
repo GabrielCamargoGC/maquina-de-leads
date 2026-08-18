@@ -1,5 +1,7 @@
 # Máquina de Leads
 
+<https://github.com/GabrielCamargoGC/maquina-de-leads>
+
 Site interno de busca de empresas nos **Dados Abertos do CNPJ** da Receita
 Federal. Roda num desktop da empresa, sem nuvem e sem mensalidade.
 
