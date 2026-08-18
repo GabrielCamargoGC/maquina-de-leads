@@ -34,6 +34,36 @@ function Passo($m) { Write-Host ""; Write-Host "== $m" -ForegroundColor Cyan }
 function Ok($m)    { Write-Host "  OK: $m" -ForegroundColor Green }
 function Aviso($m) { Write-Host "  ATENCAO: $m" -ForegroundColor Yellow }
 
+# Programa externo que escreve em stderr (pip avisando de versao, powercfg
+# reclamando de politica, nssm dizendo que o servico nao existe) vira
+# ErrorRecord no Windows PowerShell 5.1. Com $ErrorActionPreference = "Stop"
+# isso derruba o script inteiro por causa de uma mensagem que nem era erro.
+# Toda chamada a exe passa por aqui, com a preferencia baixada so durante a
+# execucao; quem decide se falhou e o codigo de saida.
+function Externo {
+    param([Parameter(ValueFromRemainingArguments = $true)] $Comando)
+    $anterior = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $exe = $Comando[0]
+        $resto = @($Comando[1..($Comando.Count - 1)])
+        $saida = & $exe @resto 2>&1
+        # Cada linha de stderr chega como ErrorRecord; imprimir isso cru
+        # despeja stack trace do PowerShell na tela. Fica so a mensagem.
+        $texto = @($saida | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                $_.Exception.Message
+            } else { $_ }
+        }) -join [Environment]::NewLine
+        return [pscustomobject]@{
+            Codigo = $LASTEXITCODE
+            Saida  = $texto.Trim()
+        }
+    } finally {
+        $ErrorActionPreference = $anterior
+    }
+}
+
 # --- administrador -----------------------------------------------------------
 $souAdmin = ([Security.Principal.WindowsPrincipal] `
     [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -66,17 +96,27 @@ if (-not $py) {
     Write-Host "  'Add python.exe to PATH' e rode este script de novo." -ForegroundColor Red
     exit 1
 }
-Info ("encontrado: " + (& $py.Source --version 2>&1))
+Info ("encontrado: " + (Externo $py.Source "--version").Saida)
 
 if (-not (Test-Path $python)) {
     Info "criando ambiente virtual em .venv"
-    & $py.Source -m venv $venv
+    $r = Externo $py.Source "-m" "venv" $venv
+    if ($r.Codigo -ne 0) {
+        Write-Host "  falha ao criar o ambiente virtual:" -ForegroundColor Red
+        Write-Host $r.Saida
+        exit 1
+    }
 } else {
     Info "ambiente virtual ja existe"
 }
 
-& $python -m pip install --upgrade pip --quiet
-& $python -m pip install -r (Join-Path $Raiz "requirements.txt") --quiet
+Externo $python "-m" "pip" "install" "--upgrade" "pip" "--quiet" | Out-Null
+$r = Externo $python "-m" "pip" "install" "-r" (Join-Path $Raiz "requirements.txt") "--quiet"
+if ($r.Codigo -ne 0) {
+    Write-Host "  falha ao instalar as dependencias:" -ForegroundColor Red
+    Write-Host $r.Saida
+    exit 1
+}
 Ok "dependencias instaladas"
 
 New-Item -ItemType Directory -Force -Path $logs, $tools | Out-Null
@@ -118,11 +158,11 @@ if ($SemFerramentas) {
 # --- 3. energia --------------------------------------------------------------
 Passo "3/6 energia (o site cai se a maquina dormir)"
 
-powercfg /change standby-timeout-ac 0
-powercfg /change hibernate-timeout-ac 0
-powercfg /change disk-timeout-ac 0
-powercfg /change monitor-timeout-ac 15
-try { powercfg /hibernate off } catch { }
+Externo powercfg "/change" "standby-timeout-ac"   "0"  | Out-Null
+Externo powercfg "/change" "hibernate-timeout-ac" "0"  | Out-Null
+Externo powercfg "/change" "disk-timeout-ac"      "0"  | Out-Null
+Externo powercfg "/change" "monitor-timeout-ac"   "15" | Out-Null
+Externo powercfg "/hibernate" "off" | Out-Null
 Ok "suspensao e hibernacao desligadas (a tela ainda apaga, o PC nao dorme)"
 Aviso "na BIOS, ligue 'Restore on AC Power Loss' para religar sozinho apos queda de luz"
 
@@ -132,27 +172,44 @@ Passo "4/6 servicos do Windows"
 if (-not (Test-Path $nssm)) {
     Aviso "sem nssm.exe, pulando servicos. Rode sem -SemFerramentas."
 } else {
-    function RegistrarServico($nome, $exe, $args, $logBase) {
-        $existe = & $nssm status $nome 2>$null
-        if ($LASTEXITCODE -eq 0) {
+    # O nssm escreve em stderr em situacao normal: "Can't open service!"
+    # quando o servico ainda nao existe. Dai passar tudo pelo Externo.
+    function Nssm {
+        param([Parameter(ValueFromRemainingArguments = $true)] $Argumentos)
+        return (Externo $nssm @Argumentos).Saida
+    }
+
+    function RegistrarServico($nome, $exe, $parametros, $logBase) {
+        # Get-Service em vez de "nssm status": e cmdlet, nao programa externo,
+        # entao responde "nao existe" sem passar por stderr.
+        if (Get-Service -Name $nome -ErrorAction SilentlyContinue) {
             Info "$nome ja existe, reconfigurando"
-            & $nssm stop $nome 2>$null | Out-Null
+            Nssm stop $nome | Out-Null
         } else {
             Info "criando $nome"
-            & $nssm install $nome $exe $args | Out-Null
+            Nssm install $nome $exe $parametros | Out-Null
         }
-        & $nssm set $nome Application        $exe            | Out-Null
-        & $nssm set $nome AppParameters      $args           | Out-Null
-        & $nssm set $nome AppDirectory       $Raiz           | Out-Null
-        & $nssm set $nome Start              SERVICE_AUTO_START | Out-Null
-        & $nssm set $nome AppStdout          (Join-Path $logs "$logBase.log") | Out-Null
-        & $nssm set $nome AppStderr          (Join-Path $logs "$logBase.log") | Out-Null
-        & $nssm set $nome AppRotateFiles     1               | Out-Null
-        & $nssm set $nome AppRotateBytes     10485760        | Out-Null
-        & $nssm set $nome AppExit Default    Restart         | Out-Null
-        & $nssm set $nome AppRestartDelay    5000            | Out-Null
-        & $nssm start $nome 2>$null | Out-Null
-        Ok "$nome"
+        Nssm set $nome Application     $exe               | Out-Null
+        Nssm set $nome AppParameters   $parametros        | Out-Null
+        Nssm set $nome AppDirectory    $Raiz              | Out-Null
+        Nssm set $nome Start           SERVICE_AUTO_START | Out-Null
+        Nssm set $nome AppStdout       (Join-Path $logs "$logBase.log") | Out-Null
+        Nssm set $nome AppStderr       (Join-Path $logs "$logBase.log") | Out-Null
+        Nssm set $nome AppRotateFiles  1                  | Out-Null
+        Nssm set $nome AppRotateBytes  10485760           | Out-Null
+        Nssm set $nome AppExit Default Restart            | Out-Null
+        Nssm set $nome AppRestartDelay 5000               | Out-Null
+        Nssm start $nome | Out-Null
+
+        Start-Sleep -Seconds 2
+        $svc = Get-Service -Name $nome -ErrorAction SilentlyContinue
+        if ($svc -and $svc.Status -eq "Running") {
+            Ok "$nome rodando"
+        } elseif ($svc) {
+            Aviso "$nome registrado mas esta '$($svc.Status)'. Veja $logs\$logBase.log"
+        } else {
+            Aviso "$nome nao foi registrado. Veja $logs\$logBase.log"
+        }
     }
 
     RegistrarServico $NomeServico $python "-m leads.servir --porta $Porta" "site"
