@@ -168,8 +168,8 @@ que faz a tela **Empresas novas** ser exata.
 
 | Sintoma | Causa provável | O que fazer |
 |---|---|---|
-| Site fora do ar | serviço parado | `sc query LeadsCNPJ`; se parado, `sc start LeadsCNPJ` |
-| Site fora e serviço rodando | túnel caído | `sc query LeadsCNPJ-Tunel`; veja `logs\tunel.log` |
+| Site fora do ar | serviço parado | `Get-Service LeadsCNPJ`; se parado, `Start-Service LeadsCNPJ` |
+| Site fora e serviço rodando | túnel caído | `Get-Service LeadsCNPJ-Tunel`; veja `logs\tunel.log` |
 | "Base não carregada" | primeira carga não rodou | passo 3 |
 | Base velha | job falhou | `logs\atualizar-AAAA-MM.log` |
 | Atualização não roda | tarefa desativada | Agendador de Tarefas → `LeadsCNPJ-Atualizar` |
@@ -180,10 +180,15 @@ Comandos de diagnóstico:
 
 ```powershell
 cd C:\leads
+Get-Service LeadsCNPJ, LeadsCNPJ-Tunel
 .\.venv\Scripts\python.exe -m leads.atualizar --so-checar
 Invoke-WebRequest http://127.0.0.1:8080/saude -UseBasicParsing
 Get-Content logs\site.log -Tail 40
 ```
+
+> Use `Get-Service`, nao `sc query`. Em PowerShell, `sc` e alias de
+> `Set-Content` e engole o comando sem erro nenhum -- parece que o servico
+> nao existe. Se preferir a ferramenta do Windows, chame `sc.exe query`.
 
 ---
 
@@ -192,9 +197,9 @@ Get-Content logs\site.log -Tail 40
 ```powershell
 cd C:\leads
 git pull
-sc stop LeadsCNPJ
+Stop-Service LeadsCNPJ
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt --quiet
-sc start LeadsCNPJ
+Start-Service LeadsCNPJ
 ```
 
 30 segundos, sem mexer nos dados.

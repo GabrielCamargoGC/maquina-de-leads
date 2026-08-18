@@ -95,22 +95,62 @@ class Trava:
 # ------------------------------------------------------------ servico
 
 
-def _servico(acao):
-    """Para/inicia o site. Silencioso quando o servico nao existe -- em
-    desenvolvimento o site roda a mao e nao ha nada para parar."""
+def _estado_servico():
+    """RUNNING / STOPPED / None (nao instalado). None e situacao normal em
+    desenvolvimento, onde o site roda a mao."""
     if os.name != "nt":
-        cmd = ["systemctl", acao, NOME_SERVICO]
-    else:
-        cmd = ["sc", acao, NOME_SERVICO]
+        r = subprocess.run(["systemctl", "is-active", NOME_SERVICO],
+                           capture_output=True, text=True)
+        if r.returncode not in (0, 3):
+            return None
+        return "RUNNING" if r.stdout.strip() == "active" else "STOPPED"
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        if r.returncode == 0:
-            _log(f"  servico {NOME_SERVICO}: {acao} ok")
-            return True
-        _log(f"  servico {NOME_SERVICO}: {acao} devolveu {r.returncode} "
-             f"(provavelmente nao instalado; seguindo)")
+        r = subprocess.run(["sc.exe", "query", NOME_SERVICO],
+                           capture_output=True, text=True, timeout=30)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    if r.returncode != 0:
+        return None
+    saida = r.stdout.upper()
+    if "RUNNING" in saida:
+        return "RUNNING"
+    if "STOPPED" in saida:
+        return "STOPPED"
+    return "TRANSICAO"
+
+
+def _servico(acao, esperar=60):
+    """Para/inicia o site e ESPERA a transicao terminar.
+
+    Esperar nao e zelo: "sc stop" volta assim que o pedido e aceito, nao
+    quando o processo morreu. E o Windows recusa renomear uma pasta que
+    ainda tenha arquivo aberto -- que e exatamente o que a troca da base faz
+    logo depois. Sem esta espera, a troca mensal falha de forma
+    intermitente, dependendo de quanto o servico demora para soltar os
+    arquivos.
+    """
+    if _estado_servico() is None:
+        _log(f"  servico {NOME_SERVICO} nao instalado; seguindo sem ele")
+        return False
+
+    cmd = (["systemctl", acao, NOME_SERVICO] if os.name != "nt"
+           else ["sc.exe", acao, NOME_SERVICO])
+    try:
+        subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
         _log(f"  servico {NOME_SERVICO}: nao consegui {acao} ({e}); seguindo")
+        return False
+
+    alvo = "STOPPED" if acao == "stop" else "RUNNING"
+    limite = time.time() + esperar
+    while time.time() < limite:
+        if _estado_servico() == alvo:
+            _log(f"  servico {NOME_SERVICO}: {alvo.lower()}")
+            return True
+        time.sleep(1)
+
+    _log(f"  [aviso] servico {NOME_SERVICO} nao chegou a {alvo} em {esperar}s "
+         f"(estado: {_estado_servico()})")
     return False
 
 
@@ -126,6 +166,25 @@ def precisa_atualizar():
     return (publicada != instalada), publicada, instalada
 
 
+def _renomear(origem, destino, tentativas=10):
+    """os.rename com nova tentativa.
+
+    No Windows, renomear pasta que ainda tenha arquivo aberto levanta
+    PermissionError. O servico ja foi parado e esperado antes de chegar
+    aqui, mas antivirus e indexador tambem seguram arquivo por alguns
+    instantes -- e melhor insistir por 10s do que abortar uma atualizacao
+    que levou 40 minutos.
+    """
+    for tentativa in range(1, tentativas + 1):
+        try:
+            os.rename(origem, destino)
+            return
+        except PermissionError:
+            if tentativa == tentativas:
+                raise
+            time.sleep(1)
+
+
 def trocar(referencia, linhas, municipios, ufs):
     """atual -> anterior -> lixo, novo -> atual. Renomear e instantaneo.
 
@@ -136,10 +195,10 @@ def trocar(referencia, linhas, municipios, ufs):
     shutil.rmtree(lixo, ignore_errors=True)
 
     if config.DIR_ANTERIOR.exists():
-        os.rename(config.DIR_ANTERIOR, lixo)
+        _renomear(config.DIR_ANTERIOR, lixo)
     if config.DIR_ATUAL.exists():
-        os.rename(config.DIR_ATUAL, config.DIR_ANTERIOR)
-    os.rename(config.DIR_NOVO, config.DIR_ATUAL)
+        _renomear(config.DIR_ATUAL, config.DIR_ANTERIOR)
+    _renomear(config.DIR_NOVO, config.DIR_ATUAL)
 
     estado.gravar(config.DIR_ATUAL, referencia=referencia, linhas=linhas,
                   municipios=municipios, ufs=ufs)

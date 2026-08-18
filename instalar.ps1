@@ -281,7 +281,7 @@ Write-Host "     d) Zero Trust > Access > Applications: libere so os e-mails da 
 Write-Host "     e) rode este instalador de novo para registrar o servico do tunel"
 Write-Host ""
 Write-Host "Comandos uteis:" -ForegroundColor White
-Write-Host "     sc query $NomeServico              situacao do site"
+Write-Host "     Get-Service $NomeServico          situacao do site"
 Write-Host "     $python -m leads.atualizar --so-checar   tem base nova?"
 Write-Host "     logs em $logs"
 Write-Host ""
