@@ -26,7 +26,7 @@ from urllib.parse import quote
 from flask import (Flask, Response, redirect, render_template, request,
                    send_file, url_for)
 
-from . import acesso, busca, config, estado, exportar, novidades
+from . import acesso, auditoria, busca, config, estado, exportar, novidades
 
 app = Flask(__name__)
 
@@ -212,6 +212,11 @@ def pedir_export():
     if not f.preenchido:
         return redirect(url_for("tela_busca"))
     try:
+        auditoria.registrar(
+            auditoria.EXPORTOU,
+            usuario=(acesso.usuario_atual() or {}).get("usuario", ""),
+            ip=acesso._ip(), filtros=f.descricao(), formato=formato, fonte=fonte,
+        )
         job_id = exportar.enfileirar(
             f.para_busca(), formato=formato,
             descricao=f"{f.descricao()} ({'novas' if fonte == 'novidades' else 'busca'})",

@@ -18,7 +18,7 @@ from functools import wraps
 from flask import (Blueprint, abort, redirect, render_template, request,
                    session, url_for)
 
-from . import config, contas
+from . import auditoria, busca, config, contas, estado, saude
 
 bp = Blueprint("acesso", __name__)
 
@@ -122,6 +122,7 @@ def instalar(app):
         PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * contas.DIAS_SESSAO,
     )
     contas.criar_tabelas()
+    auditoria.criar_tabelas()
     app.register_blueprint(bp)
 
     @app.before_request
@@ -173,6 +174,7 @@ def entrar():
             )
             session.permanent = True
             session[CHAVE_SESSAO] = token
+            auditoria.registrar(auditoria.LOGIN_OK, usuario=u["usuario"], ip=_ip())
             if u["trocar_senha"]:
                 return redirect(url_for("acesso.trocar_senha"))
             # so aceita destino interno: "proximo" vem da URL e um endereco
@@ -182,6 +184,11 @@ def entrar():
             return redirect(url_for("tela_busca"))
         except contas.ErroConta as e:
             erro = str(e)
+            # "Muitas tentativas" e um evento diferente de senha errada: um
+            # e alguem digitando errado, o outro e o freio ja atuando.
+            tipo = (auditoria.LOGIN_BLOQUEADO if "tentativas" in erro.lower()
+                    else auditoria.LOGIN_ERRO)
+            auditoria.registrar(tipo, usuario=usuario, ip=_ip(), motivo=erro)
 
     return render_template("entrar.html", erro=erro, usuario=usuario,
                            proximo=proximo)
@@ -216,6 +223,11 @@ def cadastrar():
             # Os codigos so existem legiveis aqui. Passar pela sessao e o
             # jeito de mostra-los na proxima tela sem grava-los em lugar
             # nenhum -- e sao apagados assim que aparecem.
+            auditoria.registrar(
+                auditoria.CONTA_CRIADA,
+                usuario=(atual["usuario"] if atual else dados["usuario"]),
+                ip=_ip(), alvo=dados["usuario"], master=primeiro,
+            )
             session["codigos_novos"] = codigos
             session["codigos_de"] = dados["usuario"]
             if primeiro:
@@ -257,6 +269,8 @@ def recuperar():
                 usuario, request.form.get("codigo") or "", senha, ip=_ip()
             )
             ok = True
+            auditoria.registrar(auditoria.CODIGO_USADO, usuario=usuario,
+                                ip=_ip(), restantes=restantes)
         except contas.ErroConta as e:
             erro = str(e)
 
@@ -280,6 +294,8 @@ def trocar_senha():
             contas.trocar_senha(u["id"], senha)
             # trocar_senha derruba as sessoes, inclusive esta: entra de novo
             # com a senha nova para o usuario nao cair na tela de login
+            auditoria.registrar(auditoria.SENHA_TROCADA, usuario=u["usuario"],
+                                ip=_ip())
             token, _ = contas.autenticar(u["usuario"], senha, ip=_ip())
             session[CHAVE_SESSAO] = token
             return redirect(url_for("tela_busca"))
@@ -292,6 +308,77 @@ def trocar_senha():
 
 @bp.route("/sair")
 def sair():
+    u = usuario_atual()
+    if u:
+        auditoria.registrar(auditoria.SAIU, usuario=u["usuario"], ip=_ip())
     contas.encerrar_sessao(session.get(CHAVE_SESSAO))
     session.clear()
     return redirect(url_for("acesso.home"))
+
+
+# ------------------------------------------------------------ painel master
+
+
+@bp.route("/master")
+@exigir_master
+def master():
+    return render_template(
+        "master.html",
+        pagina="master",
+        maquina=saude.coletar(),
+        usuarios=contas.listar_usuarios(),
+        eventos=auditoria.listar(limite=60),
+        resumo=auditoria.resumo(horas=24),
+        rotulos=auditoria.ROTULOS,
+        base_pronta=busca.base_pronta(),
+        info_base=estado.ler(),
+        senha_gerada=session.pop("senha_gerada", None),
+        codigos_gerados=session.pop("codigos_gerados", None),
+        aviso=session.pop("aviso_master", None),
+    )
+
+
+@bp.route("/master/acao", methods=["POST"])
+@exigir_master
+def master_acao():
+    conferir_csrf()
+    eu = usuario_atual()
+    acao = request.form.get("acao")
+    alvo_id = request.form.get("usuario_id", type=int)
+    alvo = contas.buscar_usuario(usuario_id=alvo_id) if alvo_id else None
+
+    if not alvo:
+        session["aviso_master"] = "Usuario nao encontrado."
+        return redirect(url_for("acesso.master"))
+
+    # O master nao pode se desativar nem se trancar fora: sem isto, um clique
+    # errado deixaria a maquina sem ninguem capaz de administrar contas.
+    if alvo["id"] == eu["id"] and acao in ("desativar", "senha_temporaria"):
+        session["aviso_master"] = "Voce nao pode fazer isso na sua propria conta."
+        return redirect(url_for("acesso.master"))
+
+    if acao == "desativar":
+        contas.definir_ativo(alvo["id"], False)
+        auditoria.registrar(auditoria.CONTA_DESATIVADA, usuario=eu["usuario"],
+                            ip=_ip(), alvo=alvo["usuario"])
+        session["aviso_master"] = f"Conta '{alvo['usuario']}' desativada."
+
+    elif acao == "ativar":
+        contas.definir_ativo(alvo["id"], True)
+        auditoria.registrar(auditoria.CONTA_ATIVADA, usuario=eu["usuario"],
+                            ip=_ip(), alvo=alvo["usuario"])
+        session["aviso_master"] = f"Conta '{alvo['usuario']}' reativada."
+
+    elif acao == "senha_temporaria":
+        senha = contas.gerar_senha_temporaria(alvo["id"])
+        auditoria.registrar(auditoria.SENHA_TEMPORARIA, usuario=eu["usuario"],
+                            ip=_ip(), alvo=alvo["usuario"])
+        session["senha_gerada"] = {"usuario": alvo["usuario"], "senha": senha}
+
+    elif acao == "refazer_codigos":
+        codigos = contas.gerar_codigos(alvo["id"])
+        auditoria.registrar(auditoria.CODIGOS_REFEITOS, usuario=eu["usuario"],
+                            ip=_ip(), alvo=alvo["usuario"])
+        session["codigos_gerados"] = {"usuario": alvo["usuario"], "codigos": codigos}
+
+    return redirect(url_for("acesso.master"))

@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block titulo %}Master — Maquina de Leads{% endblock %}
+{% block cabecalho %}Painel master{% endblock %}
+{% block subtitulo %}Saude da maquina, contas e registro de eventos.{% endblock %}
+
+{% block conteudo %}
+
+{% if aviso %}
+  <div class="card"><div class="alerta alerta-ok">{{ aviso }}</div></div>
+{% endif %}
+
+{# Senha temporaria e codigos aparecem UMA vez, logo apos gerar. Ficam na
+   sessao so ate esta renderizacao -- recarregar a pagina nao os mostra de
+   novo, porque credencial que fica na tela acaba em print no grupo. #}
+{% if senha_gerada %}
+  <div class="card">
+    <h2>Senha temporaria de {{ senha_gerada.usuario }}</h2>
+    <p><code class="destaque">{{ senha_gerada.senha }}</code></p>
+    <div class="alerta alerta-aviso">
+      Entregue por WhatsApp ou pessoalmente. Vale 24 horas e a pessoa e
+      obrigada a trocar no primeiro acesso. Esta senha nao aparece de novo.
+    </div>
+  </div>
+{% endif %}
+
+{% if codigos_gerados %}
+  <div class="card">
+    <h2>Novos codigos de {{ codigos_gerados.usuario }}</h2>
+    <div class="codigos">
+      {% for c in codigos_gerados.codigos %}<code>{{ c }}</code>{% endfor %}
+    </div>
+    <div class="alerta alerta-aviso">
+      Os codigos antigos deixaram de valer. Entregue estes a pessoa: nao
+      aparecem de novo.
+    </div>
+  </div>
+{% endif %}
+
+{# ---------------- saude ---------------- #}
+
+<div class="card">
+  <h2>Maquina</h2>
+  <div class="grade">
+    <div class="metrica">
+      <div class="rot">Memoria</div>
+      <div class="val">{{ maquina.ram_pct if maquina.ram_pct is not none else '—' }}%</div>
+      <div class="barra {{ 'alerta-cheio' if maquina.ram_pct and maquina.ram_pct > 85 }}">
+        <span style="width: {{ maquina.ram_pct or 0 }}%"></span>
+      </div>
+      <p class="dica">{{ maquina.ram_texto }}</p>
+    </div>
+
+    <div class="metrica">
+      <div class="rot">Disco</div>
+      <div class="val">{{ maquina.disco_pct }}%</div>
+      <div class="barra {{ 'alerta-cheio' if maquina.disco_pct > 88 }}">
+        <span style="width: {{ maquina.disco_pct }}%"></span>
+      </div>
+      <p class="dica">{{ maquina.disco_texto }}</p>
+    </div>
+
+    <div class="metrica">
+      <div class="rot">CPU</div>
+      <div class="val">{{ maquina.cpu_pct ~ '%' if maquina.cpu_pct is not none else '—' }}</div>
+      <div class="barra"><span style="width: {{ maquina.cpu_pct or 0 }}%"></span></div>
+      <p class="dica">
+        {% if maquina.cpu_pct is none %}
+          medindo — recarregue para ver
+        {% else %}
+          desde a ultima vez que esta tela abriu
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="metrica">
+      <div class="rot">Ligada ha</div>
+      <div class="val">{{ maquina.ligado_ha }}</div>
+      <p class="dica">desde o ultimo reinicio</p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Servicos e base</h2>
+  <div class="tabela-rolagem">
+    <table>
+      <tbody>
+        <tr>
+          <td style="width:34%"><strong>Site</strong></td>
+          <td><span class="pill {{ 'pill-sim' if maquina.servico_site == 'no ar' else 'pill-erro' }}">{{ maquina.servico_site }}</span></td>
+        </tr>
+        <tr>
+          <td><strong>Tunel</strong></td>
+          <td><span class="pill {{ 'pill-sim' if maquina.servico_tunel == 'no ar' else 'pill-erro' }}">{{ maquina.servico_tunel }}</span></td>
+        </tr>
+        <tr><td><strong>Mes da Receita</strong></td><td>{{ maquina.base_referencia }}</td></tr>
+        <tr><td><strong>Estabelecimentos</strong></td><td class="num">{{ maquina.base_linhas|milhar }}</td></tr>
+        <tr><td><strong>Municipios</strong></td><td class="num">{{ maquina.base_municipios|milhar }}</td></tr>
+        <tr><td><strong>Atualizada em</strong></td><td>{{ maquina.base_atualizada }}</td></tr>
+        <tr><td><strong>Tamanho em disco</strong></td><td>{{ maquina.base_tamanho }}</td></tr>
+        <tr>
+          <td><strong>Empresas novas</strong></td>
+          <td>
+            {% if maquina.tem_anterior %}
+              <span class="pill pill-sim">comparacao exata</span>
+            {% else %}
+              <span class="pill pill-espera">aproximada ate a proxima atualizacao</span>
+            {% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ---------------- contas ---------------- #}
+
+<div class="card" style="padding:0">
+  <div style="padding:22px 26px 0">
+    <h2 style="margin-bottom:4px">Contas</h2>
+    <p class="dica">{{ usuarios|length }} conta(s). Novas contas so por aqui.</p>
+  </div>
+  <div class="tabela-rolagem">
+    <table>
+      <thead>
+        <tr>
+          <th>Usuario</th><th>Situacao</th><th class="num">Codigos</th>
+          <th>Ultimo acesso</th><th>Acoes</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for u in usuarios %}
+        <tr>
+          <td>
+            <div class="razao">{{ u.usuario }}{% if u.e_master %}
+              <span class="pill pill-info" style="margin-left:6px">master</span>{% endif %}</div>
+            {% if u.nome %}<div class="fantasia">{{ u.nome }}</div>{% endif %}
+          </td>
+          <td>
+            <span class="pill {{ 'pill-sim' if u.ativo else 'pill-nao' }}">
+              {{ 'ativa' if u.ativo else 'desativada' }}
+            </span>
+            {% if u.trocar_senha %}
+              <span class="pill pill-espera">senha temporaria</span>
+            {% endif %}
+          </td>
+          <td class="num">{{ u.codigos }}</td>
+          <td class="fantasia">{{ u.ultimo_acesso[:16].replace('T', ' ') if u.ultimo_acesso else 'nunca' }}</td>
+          <td>
+            <form method="post" action="{{ url_for('acesso.master_acao') }}"
+                  class="acoes" style="margin:0;gap:6px">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="hidden" name="usuario_id" value="{{ u.id }}">
+              {% if u.id != usuario.id %}
+                <button class="botao secundario" name="acao" value="senha_temporaria"
+                        style="padding:6px 14px;font-size:13px">Senha temporaria</button>
+                {% if u.ativo %}
+                  <button class="botao secundario" name="acao" value="desativar"
+                          style="padding:6px 14px;font-size:13px">Desativar</button>
+                {% else %}
+                  <button class="botao secundario" name="acao" value="ativar"
+                          style="padding:6px 14px;font-size:13px">Reativar</button>
+                {% endif %}
+              {% endif %}
+              <button class="botao secundario" name="acao" value="refazer_codigos"
+                      style="padding:6px 14px;font-size:13px">Refazer codigos</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="padding:16px 26px 22px">
+    <a class="botao primario" href="{{ url_for('acesso.cadastrar') }}">Criar conta</a>
+  </div>
+</div>
+
+{# ---------------- SIEM ---------------- #}
+
+<div class="card">
+  <h2>Ultimas 24 horas</h2>
+  <div class="grade">
+    {% for tipo, rotulo in rotulos.items() %}
+      {% if resumo.get(tipo) %}
+        <div class="metrica">
+          <div class="rot">{{ rotulo }}</div>
+          <div class="val">{{ resumo[tipo] }}</div>
+        </div>
+      {% endif %}
+    {% endfor %}
+    {% if not resumo %}
+      <p class="dica">Nada registrado nas ultimas 24 horas.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="padding:0">
+  <div style="padding:22px 26px 0">
+    <h2 style="margin-bottom:4px">Registro de eventos</h2>
+    <p class="dica">
+      Ultimos {{ eventos|length }}. Guardados por 180 dias. Em destaque, o que
+      merece olhar: senha errada, bloqueio, conta desativada, senha temporaria.
+    </p>
+  </div>
+  <div class="tabela-rolagem">
+    <table>
+      <thead>
+        <tr><th>Quando</th><th>Evento</th><th>Usuario</th><th>De onde</th><th>Detalhe</th></tr>
+      </thead>
+      <tbody>
+      {% for e in eventos %}
+        <tr {% if e.grave %}class="destaque"{% endif %}>
+          <td class="num fantasia">{{ e.quando_local }}</td>
+          <td>{{ e.rotulo }}</td>
+          <td>{{ e.usuario or '—' }}</td>
+          <td class="num fantasia">{{ e.ip or '—' }}</td>
+          <td class="fantasia">
+            {% for chave, valor in e.detalhe_dict.items() %}
+              {{ chave }}: {{ valor }}{{ ', ' if not loop.last }}
+            {% endfor %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="fantasia" style="padding:20px 12px">
+          Nenhum evento registrado ainda.
+        </td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
