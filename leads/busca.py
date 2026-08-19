@@ -49,11 +49,21 @@ def conexao(dir_dados=None):
         return _con
 
 
-# balde e uf sao pastas, nao colunas dentro do arquivo. Sem fixar o tipo, o
-# autodetect do DuckDB leria o balde "0" como numero e a comparacao com
-# texto falharia. Os tipos tem que ser os mesmos da gravacao.
-LEITURA = ("read_parquet('{}', hive_partitioning=1, hive_types="
-           + consolidar.hive_tipos_sql() + ")")
+def leitura(caminho):
+    """Trecho FROM que le o parquet consolidado.
+
+    balde e uf sao pastas, nao colunas dentro do arquivo. Sem fixar o tipo, o
+    autodetect do DuckDB leria o balde "0" como numero e a comparacao com
+    texto falharia -- por isso hive_types, com os mesmos tipos da gravacao.
+
+    Isto e funcao, e nao uma constante com .format(), de proposito: o
+    hive_types e um dicionario SQL e leva chaves no texto
+    ({'balde': 'VARCHAR', ...}). Passar essa string por .format() faz o
+    Python tentar substituir 'balde' como campo e levantar KeyError -- foi
+    assim que a primeira busca em producao quebrou.
+    """
+    return (f"read_parquet('{caminho}', hive_partitioning=1, "
+            f"hive_types={consolidar.hive_tipos_sql()})")
 
 
 def _caminhos(dir_dados=None):
@@ -284,7 +294,7 @@ def contar(f, dir_dados=None):
     onde, params = _montar_where(f, dir_dados)
     cam = _caminhos(dir_dados)
     cur = conexao(dir_dados).cursor()
-    sql = f"SELECT count(*) FROM {LEITURA.format(cam['empresas'])} WHERE {onde}"
+    sql = f"SELECT count(*) FROM {leitura(cam['empresas'])} WHERE {onde}"
     return cur.execute(sql, params).fetchone()[0]
 
 
@@ -295,7 +305,7 @@ def buscar(f, limite=None, offset=0, colunas=None, dir_dados=None):
     cur = conexao(dir_dados).cursor()
     cols = ", ".join(colunas or COLUNAS_TELA)
 
-    sql = (f"SELECT {cols} FROM {LEITURA.format(cam['empresas'])} "
+    sql = (f"SELECT {cols} FROM {leitura(cam['empresas'])} "
            f"WHERE {onde} ORDER BY razao_social")
     if limite is not None:
         sql += f" LIMIT {int(limite)} OFFSET {int(offset)}"
@@ -313,6 +323,17 @@ def buscar_arrow(f, colunas=None, dir_dados=None):
     cam = _caminhos(dir_dados)
     cur = conexao(dir_dados).cursor()
     cols = ", ".join(colunas or COLUNAS_TELA)
-    sql = (f"SELECT {cols} FROM {LEITURA.format(cam['empresas'])} "
+    sql = (f"SELECT {cols} FROM {leitura(cam['empresas'])} "
            f"WHERE {onde} ORDER BY razao_social")
-    return cur.execute(sql, params).fetch_arrow_reader(batch_size=50_000)
+    resultado = cur.execute(sql, params)
+    # O nome do metodo mudou entre versoes do DuckDB (fetch_arrow_reader ->
+    # to_arrow_reader). Aceitar os dois evita que uma atualizacao da
+    # biblioteca derrube justamente o export, que e o que a equipe mais usa.
+    for nome in ("to_arrow_reader", "fetch_arrow_reader"):
+        metodo = getattr(resultado, nome, None)
+        if metodo is not None:
+            return metodo(batch_size=50_000)
+    raise RuntimeError(
+        "esta versao do DuckDB nao expoe leitura Arrow em lotes "
+        "(nem to_arrow_reader nem fetch_arrow_reader)"
+    )
