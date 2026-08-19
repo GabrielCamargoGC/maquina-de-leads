@@ -66,10 +66,12 @@ Power On"). Sem isso, queda de luz derruba o site até alguém apertar o botão.
 ```powershell
 Start-Process C:\leads\.venv\Scripts\python.exe `
   -ArgumentList "-m","leads.atualizar","--forcar","--retomar" `
-  -WorkingDirectory C:\leads -WindowStyle Hidden
+  -WorkingDirectory C:\leads -WindowStyle Minimized
 ```
 
-Roda **destacado**: fechar a janela, deslogar ou ir embora nao mata o job.
+Roda **destacado**: fechar a janela de onde voce chamou, deslogar ou ir
+embora nao mata o job. Minimizado, nao oculto -- com janela oculta um erro
+na partida desaparece sem deixar rastro.
 Acompanhe pelo log, de qualquer janela:
 
 ```powershell

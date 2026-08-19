@@ -118,6 +118,46 @@ class Trava:
         self.caminho = Path(caminho)
         self.fd = None
 
+    def _dono_vivo(self):
+        """O processo que criou a trava ainda existe?
+
+        Sem isso, um job morto (janela fechada, queda de energia) deixa a
+        trava para tras e bloqueia todas as execucoes seguintes ate 12 h
+        depois -- inclusive as 03:00 do dia seguinte. Foi exatamente o que
+        aconteceu na primeira tentativa de retomada.
+        """
+        try:
+            pid = int(self.caminho.read_text(encoding="utf-8").split()[0])
+        except (OSError, ValueError, IndexError):
+            return False  # trava ilegivel: trata como abandonada
+
+        if pid == os.getpid():
+            return False
+        if os.name != "nt":
+            try:
+                os.kill(pid, 0)
+                return True
+            except (ProcessLookupError, PermissionError) as e:
+                return isinstance(e, PermissionError)
+
+        # No Windows os.kill mata o processo em vez de so consultar; a
+        # pergunta "existe?" se faz abrindo um handle de consulta.
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+        )
+        if not handle:
+            return False
+        try:
+            codigo = ctypes.c_ulong()
+            if ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(codigo)):
+                return codigo.value == 259  # STILL_ACTIVE
+            return True
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+
     def __enter__(self):
         self.caminho.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -126,6 +166,10 @@ class Trava:
             return self
         except FileExistsError:
             idade = time.time() - self.caminho.stat().st_mtime
+            if not self._dono_vivo():
+                _log("[aviso] trava de um processo que nao existe mais; limpando")
+                self.caminho.unlink(missing_ok=True)
+                return self.__enter__()
             if idade > 12 * 3600:
                 _log(f"[aviso] trava com {idade/3600:.0f}h, tratando como abandonada")
                 self.caminho.unlink(missing_ok=True)
@@ -362,7 +406,13 @@ def main():
               f"precisa_atualizar={'sim' if precisa else 'nao'}")
         return 0 if not precisa else 10
 
-    with Trava(config.DIR_DADOS / "atualizar.lock"), log_em_arquivo():
+    # log_em_arquivo ANTES da Trava, de proposito. Na ordem inversa, quando a
+    # trava recusa a execucao a mensagem sai antes de existir log -- e se o
+    # processo foi iniciado com janela oculta, ela some sem deixar rastro.
+    # Foi o que aconteceu na primeira tentativa de retomada: um lock orfao de
+    # uma execucao morta barrou o job, ninguem viu o aviso, e o sintoma virou
+    # "nao acontece nada".
+    with log_em_arquivo(), Trava(config.DIR_DADOS / "atualizar.lock"):
         try:
             return executar(
                 forcar=args.forcar, manter_zips=args.manter_zips,
