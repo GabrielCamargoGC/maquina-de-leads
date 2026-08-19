@@ -33,6 +33,7 @@ import shutil
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -42,16 +43,64 @@ NOME_SERVICO = os.environ.get("LEADS_SERVICO", "LeadsCNPJ")
 DIAS_GUARDAR_EXPORT = 7
 
 
-def _log(msg):
-    linha = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
-    print(linha, flush=True)
+def arquivo_log():
+    return config.DIR_LOGS / f"atualizar-{datetime.now():%Y-%m}.log"
+
+
+class _Tee:
+    """Espelha o que sai no terminal para o arquivo de log.
+
+    Existe porque importador e consolidar reportam progresso com print(), e
+    numa execucao real a janela do PowerShell fecha (ou o usuario desconecta)
+    e esse progresso se perde. Da primeira vez isso custou uma diagnose: o
+    log ia so ate "3/5 consolidando" e nao dava para saber em qual balde o
+    job estava quando morreu.
+    """
+
+    def __init__(self, original, caminho):
+        self.original = original
+        self.arquivo = open(caminho, "a", encoding="utf-8", buffering=1)
+
+    def write(self, texto):
+        self.original.write(texto)
+        try:
+            self.arquivo.write(texto)
+        except (OSError, ValueError):
+            pass  # log nunca derruba o job
+
+    def flush(self):
+        self.original.flush()
+        try:
+            self.arquivo.flush()
+        except (OSError, ValueError):
+            pass
+
+    def fechar(self):
+        try:
+            self.arquivo.close()
+        except (OSError, ValueError):
+            pass
+
+
+@contextmanager
+def log_em_arquivo():
+    config.DIR_LOGS.mkdir(parents=True, exist_ok=True)
     try:
-        config.DIR_LOGS.mkdir(parents=True, exist_ok=True)
-        arq = config.DIR_LOGS / f"atualizar-{datetime.now():%Y-%m}.log"
-        with open(arq, "a", encoding="utf-8") as f:
-            f.write(linha + "\n")
+        tee = _Tee(sys.stdout, arquivo_log())
     except OSError:
-        pass  # nao deixar o log derrubar o job
+        yield  # sem log em arquivo e melhor que nao rodar
+        return
+    antigo = sys.stdout
+    sys.stdout = tee
+    try:
+        yield
+    finally:
+        sys.stdout = antigo
+        tee.fechar()
+
+
+def _log(msg):
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}", flush=True)
 
 
 # ------------------------------------------------------------ trava
@@ -224,7 +273,19 @@ def limpar(manter_zips=False):
         _log(f"  [aviso] limpeza de planilhas falhou: {e}")
 
 
-def executar(forcar=False, manter_zips=False, ufs_teste=None):
+def importacao_completa():
+    """A conversao dos zips ja produziu tudo que a consolidacao precisa?
+
+    Serve para o --retomar decidir se pode pular os ~9 minutos de import.
+    """
+    partes = ["estabelecimentos", "empresas", "simples"]
+    arquivos = ["municipios.parquet", "cnaes.parquet"]
+    return (all((config.DIR_NOVO / p).is_dir() and any((config.DIR_NOVO / p).iterdir())
+                for p in partes)
+            and all((config.DIR_NOVO / a).exists() for a in arquivos))
+
+
+def executar(forcar=False, manter_zips=False, ufs_teste=None, retomar=False):
     config.garantir_pastas()
     t0 = time.time()
 
@@ -243,11 +304,14 @@ def executar(forcar=False, manter_zips=False, ufs_teste=None):
     _log(f"  {qtd} arquivos, {bytes_/1e9:.1f} GB")
 
     _log("=== 2/5 convertendo para Parquet ===")
-    shutil.rmtree(config.DIR_NOVO, ignore_errors=True)
-    importador.importar(config.DIR_DOWNLOADS, config.DIR_NOVO, ufs=ufs_teste)
+    if retomar and importacao_completa():
+        _log("  --retomar: conversao ja estava pronta, pulando")
+    else:
+        shutil.rmtree(config.DIR_NOVO, ignore_errors=True)
+        importador.importar(config.DIR_DOWNLOADS, config.DIR_NOVO, ufs=ufs_teste)
 
     _log("=== 3/5 consolidando (junta e valida) ===")
-    linhas = consolidar.consolidar(config.DIR_NOVO, ufs=ufs_teste)
+    linhas = consolidar.consolidar(config.DIR_NOVO, ufs=ufs_teste, retomar=retomar)
 
     municipios = ufs = None
     try:
@@ -287,6 +351,9 @@ def main():
     ap.add_argument("--manter-zips", action="store_true",
                     help="nao apaga os zips no fim (util para depurar)")
     ap.add_argument("--ufs", help="teste: processa so estes estados, ex.: SP,PR")
+    ap.add_argument("--retomar", action="store_true",
+                    help="continua de onde a execucao anterior parou (nao rebaixa, "
+                         "nao reconverte e pula os baldes ja completos)")
     args = ap.parse_args()
 
     if args.so_checar:
@@ -295,11 +362,12 @@ def main():
               f"precisa_atualizar={'sim' if precisa else 'nao'}")
         return 0 if not precisa else 10
 
-    with Trava(config.DIR_DADOS / "atualizar.lock"):
+    with Trava(config.DIR_DADOS / "atualizar.lock"), log_em_arquivo():
         try:
             return executar(
                 forcar=args.forcar, manter_zips=args.manter_zips,
                 ufs_teste=args.ufs.split(",") if args.ufs else None,
+                retomar=args.retomar,
             )
         except SystemExit:
             raise

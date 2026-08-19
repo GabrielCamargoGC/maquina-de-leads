@@ -35,7 +35,13 @@ BASES_LEGADO = [
 # divide a maquina com 15 pessoas, a importacao roda as 03:00 sozinha.
 DUCKDB_MEMORIA = os.environ.get("LEADS_DUCKDB_MEMORIA", "2GB")
 DUCKDB_THREADS = int(os.environ.get("LEADS_DUCKDB_THREADS", "4"))
-DUCKDB_MEMORIA_IMPORT = os.environ.get("LEADS_DUCKDB_MEMORIA_IMPORT", "5GB")
+# 3 GB, nao 5: o site reserva ate 2 GB e o Windows fica com ~2 GB, entao 5
+# so caberia se a conversao rodasse absolutamente sozinha. Na pratica ela
+# roda com o site no ar, e passar do total fisico faz a maquina paginar em
+# disco -- que parece travamento, nao lentidao. Menos memoria significa mais
+# escrita temporaria em disco e alguns minutos a mais, o que as 03:00 nao
+# faz diferenca nenhuma.
+DUCKDB_MEMORIA_IMPORT = os.environ.get("LEADS_DUCKDB_MEMORIA_IMPORT", "3GB")
 DUCKDB_THREADS_IMPORT = int(os.environ.get("LEADS_DUCKDB_THREADS_IMPORT", "3"))
 # Lote de leitura do CSV. 64 MB equilibra velocidade e RAM.
 BLOCO_CSV = 64 << 20

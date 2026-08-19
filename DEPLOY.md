@@ -64,8 +64,20 @@ Power On"). Sem isso, queda de luz derruba o site até alguém apertar o botão.
 ## 3. Primeira carga da base
 
 ```powershell
-C:\leads\.venv\Scripts\python.exe -m leads.atualizar --forcar
+Start-Process C:\leads\.venv\Scripts\python.exe `
+  -ArgumentList "-m","leads.atualizar","--forcar","--retomar" `
+  -WorkingDirectory C:\leads -WindowStyle Hidden
 ```
+
+Roda **destacado**: fechar a janela, deslogar ou ir embora nao mata o job.
+Acompanhe pelo log, de qualquer janela:
+
+```powershell
+Get-Content C:\leads\logstualizar-*.log -Tail 20 -Wait
+```
+
+> Rodar direto no terminal (`python -m leads.atualizar --forcar`) tambem
+> funciona, mas o job morre junto com a janela -- e sao ~50 minutos.
 
 Baixa 7,3 GB, converte, valida e publica. Pode fechar a janela? **Não** —
 deixe aberta. Se precisar sair, agende para a noite.

@@ -149,7 +149,18 @@ def conectar(temp_dir=None, memoria=None, threads=None):
     return con
 
 
-def consolidar(dir_entrada, ufs=None):
+def _marca(destino, balde):
+    """Arquivo que diz 'este balde terminou inteiro'.
+
+    A pasta do balde existir nao basta: se o processo morre no meio da
+    gravacao, ela existe com dado pela metade. A marca so e escrita depois
+    que o COPY retorna, entao ela e a unica prova de que aquele balde esta
+    completo.
+    """
+    return destino / f".balde-{balde}.ok"
+
+
+def consolidar(dir_entrada, ufs=None, retomar=False):
     entrada = Path(dir_entrada).resolve()
 
     for nome in ("estabelecimentos", "empresas", "simples"):
@@ -160,8 +171,13 @@ def consolidar(dir_entrada, ufs=None):
             sys.exit(f"[erro] falta {entrada / nome}. Rode a etapa 1 do importador.")
 
     destino = entrada / "empresas_final"
-    shutil.rmtree(destino, ignore_errors=True)
-    destino.mkdir(parents=True)
+    if retomar and destino.exists():
+        prontos = sorted(p.name[7:-3] for p in destino.glob(".balde-*.ok"))
+        _log(f"--retomar: {len(prontos)} balde(s) ja completos "
+             f"({', '.join(prontos) if prontos else 'nenhum'})")
+    else:
+        shutil.rmtree(destino, ignore_errors=True)
+    destino.mkdir(parents=True, exist_ok=True)
 
     filtro_uf = ""
     if ufs:
@@ -178,6 +194,17 @@ def consolidar(dir_entrada, ufs=None):
         pasta = entrada / "estabelecimentos" / f"balde={balde}"
         if not pasta.exists():
             continue  # teste com poucas UFs pode nao ter todos os baldes
+
+        if retomar and _marca(destino, balde).exists():
+            _log(f"  balde {balde}: ja estava completo, pulando")
+            baldes_feitos += 1
+            continue
+
+        # Balde incompleto de uma execucao anterior: a pasta pode ter dado
+        # pela metade. Apaga antes de refazer, senao sobra linha duplicada.
+        for uf_dir in destino.glob(f"balde={balde}/*"):
+            shutil.rmtree(uf_dir, ignore_errors=True)
+
         t_b = time.time()
         con.execute(
             f"COPY ({SQL_SELECT.format(balde=balde)}{filtro_uf}) TO '{destino.as_posix()}' "
@@ -191,6 +218,7 @@ def consolidar(dir_entrada, ufs=None):
                 "cnaes": str(entrada / "cnaes.parquet"),
             },
         )
+        _marca(destino, balde).write_text("ok", encoding="utf-8")
         baldes_feitos += 1
         _log(f"  balde {balde}: {time.time()-t_b:.0f}s "
              f"(acumulado {_fmt(_tamanho(destino))})")
