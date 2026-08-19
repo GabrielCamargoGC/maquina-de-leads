@@ -215,11 +215,29 @@ if (-not (Test-Path $nssm)) {
     RegistrarServico $NomeServico $python "-m leads.servir --porta $Porta" "site"
 
     if (-not $SemTunel) {
+        # Leitura tolerante de proposito. O .env e escrito a mao, e cada
+        # forma de salvar cria uma armadilha diferente: o Notepad e varios
+        # comandos do PowerShell gravam BOM (a primeira linha vira
+        # "<BOM>LEADS_TUNEL_TOKEN=" e um "^LEADS_TUNEL_TOKEN=" nao casa);
+        # copiar da tela da Cloudflare traz espaco no fim; e e facil deixar
+        # aspas em volta do valor. Nesses casos o instalador diria "sem
+        # token" com o token no arquivo -- erro caro de diagnosticar.
         $tokenFile = Join-Path $Raiz ".env"
         $token = $null
         if (Test-Path $tokenFile) {
-            $token = (Get-Content $tokenFile | Where-Object { $_ -match "^LEADS_TUNEL_TOKEN=" }) `
-                     -replace "^LEADS_TUNEL_TOKEN=", ""
+            foreach ($linha in (Get-Content $tokenFile)) {
+                $limpa = $linha -replace "^﻿", ""
+                $limpa = $limpa.Trim()
+                if ($limpa -match "^\s*LEADS_TUNEL_TOKEN\s*=\s*(.+)$") {
+                    $token = $Matches[1].Trim().Trim('"').Trim("'").Trim()
+                    break
+                }
+            }
+        }
+        if ($token -and $token -like "*cloudflared*") {
+            Aviso "o .env parece conter o comando inteiro, nao so o token."
+            Aviso "Deixe apenas: LEADS_TUNEL_TOKEN=eyJ..."
+            $token = $null
         }
         if ([string]::IsNullOrWhiteSpace($token)) {
             Aviso "sem LEADS_TUNEL_TOKEN no .env - servico do tunel NAO instalado."
