@@ -66,6 +66,25 @@ def leitura(caminho):
             f"hive_types={consolidar.hive_tipos_sql()})")
 
 
+def leitor_arrow(resultado, tamanho_lote=50_000):
+    """Lotes Arrow a partir de um resultado do DuckDB.
+
+    O nome do metodo mudou entre versoes (fetch_arrow_reader ->
+    to_arrow_reader). Aceitar os dois evita que atualizar a biblioteca
+    derrube justamente o export, que e o que a equipe mais usa. Fica em um
+    lugar so porque ja passou despercebido em dois caminhos diferentes --
+    o export da busca e o das empresas novas.
+    """
+    for nome in ("to_arrow_reader", "fetch_arrow_reader"):
+        metodo = getattr(resultado, nome, None)
+        if metodo is not None:
+            return metodo(batch_size=tamanho_lote)
+    raise RuntimeError(
+        "esta versao do DuckDB nao expoe leitura Arrow em lotes "
+        "(nem to_arrow_reader nem fetch_arrow_reader)"
+    )
+
+
 def _caminhos(dir_dados=None):
     d = Path(dir_dados or config.DIR_ATUAL)
     return {
@@ -325,15 +344,4 @@ def buscar_arrow(f, colunas=None, dir_dados=None):
     cols = ", ".join(colunas or COLUNAS_TELA)
     sql = (f"SELECT {cols} FROM {leitura(cam['empresas'])} "
            f"WHERE {onde} ORDER BY razao_social")
-    resultado = cur.execute(sql, params)
-    # O nome do metodo mudou entre versoes do DuckDB (fetch_arrow_reader ->
-    # to_arrow_reader). Aceitar os dois evita que uma atualizacao da
-    # biblioteca derrube justamente o export, que e o que a equipe mais usa.
-    for nome in ("to_arrow_reader", "fetch_arrow_reader"):
-        metodo = getattr(resultado, nome, None)
-        if metodo is not None:
-            return metodo(batch_size=50_000)
-    raise RuntimeError(
-        "esta versao do DuckDB nao expoe leitura Arrow em lotes "
-        "(nem to_arrow_reader nem fetch_arrow_reader)"
-    )
+    return leitor_arrow(cur.execute(sql, params))

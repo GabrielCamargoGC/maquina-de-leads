@@ -28,7 +28,7 @@ def tem_base_anterior(dir_anterior=None):
 
 def _leitura(dir_dados):
     caminho = (Path(dir_dados) / "empresas_final" / "**" / "*.parquet").as_posix()
-    return busca.LEITURA.format(caminho)
+    return busca.leitura(caminho)
 
 
 def _sql(f, dir_atual, dir_anterior, colunas, ordem, limite):
@@ -42,7 +42,10 @@ def _sql(f, dir_atual, dir_anterior, colunas, ordem, limite):
         aproximado = True
     else:
         onde, params = busca._montar_where(f, dir_atual, alias="a")
-        cols = ", ".join(f"a.{c}" for c in colunas)
+        # So prefixa nome de coluna. Uma expressao como "count(*)" viraria
+        # "a.count(*)", que nao e SQL valido -- foi assim que a contagem de
+        # novidades quebrou.
+        cols = ", ".join(f"a.{c}" if c.isidentifier() else c for c in colunas)
         sql = (f"SELECT {cols} FROM {_leitura(dir_atual)} a "
                f"WHERE {onde} "
                f"  AND NOT EXISTS (SELECT 1 FROM {_leitura(dir_anterior)} b "
@@ -94,4 +97,4 @@ def arrow_novas(f, colunas, dir_atual=None, dir_anterior=None):
         f"{prefixo}data_abertura DESC NULLS LAST", None,
     )
     cur = busca.conexao(dir_atual).cursor()
-    return cur.execute(sql, params).fetch_arrow_reader(batch_size=50_000)
+    return busca.leitor_arrow(cur.execute(sql, params))
