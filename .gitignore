@@ -30,3 +30,7 @@ Thumbs.db
 # ferramental local do Claude Code (skills de terceiros, config de maquina)
 .claude/
 logs/
+
+# saida do playwright durante testes de layout
+.playwright-mcp/
+*.png

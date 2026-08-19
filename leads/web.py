@@ -21,6 +21,8 @@ import time
 import traceback
 from pathlib import Path
 
+from urllib.parse import quote
+
 from flask import (Flask, Response, redirect, render_template, request,
                    send_file, url_for)
 
@@ -35,6 +37,21 @@ def _milhar(n):
     if n is None:
         return "—"
     return f"{int(n):,}".replace(",", ".")
+
+
+# O sabre, desenhado direto no HTML. Sem arquivo .ico, sem uma requisicao a
+# mais por pagina, e sem o 404 de favicon que suja o console do navegador.
+FAVICON = quote(
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+    "<rect x='14' y='3' width='4' height='26' rx='2' fill='#FF6B00'/>"
+    "<rect x='13' y='21' width='6' height='8' rx='2' fill='#8A8A8F'/>"
+    "</svg>"
+)
+
+
+@app.context_processor
+def _globais():
+    return {"favicon": FAVICON}
 
 
 # ------------------------------------------------------------ apoio
