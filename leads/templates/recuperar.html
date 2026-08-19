@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block titulo %}Recuperar senha{% endblock %}
+
+{% block corpo %}
+<div class="palco">
+  <div class="palco-conteudo">
+    <div class="lampada"></div>
+    <p class="marca">Maquina de Leads</p>
+
+    {% if ok %}
+      <h1>Senha trocada</h1>
+      <p class="diz">
+        Pronto. Voce ainda tem <strong>{{ restantes }}</strong> codigo(s) de
+        recuperacao guardado(s).
+      </p>
+      <a class="botao primario" href="{{ url_for('acesso.entrar') }}">Entrar</a>
+
+    {% else %}
+      <h1>Esqueci minha senha</h1>
+      <p class="diz">
+        Use um dos codigos que apareceram quando a conta foi criada.
+      </p>
+
+      {% if erro %}<div class="alerta alerta-erro" style="text-align:left">{{ erro }}</div>{% endif %}
+
+      <form method="post" style="margin-top:22px">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="campo">
+          <label for="usuario">Usuario</label>
+          <input class="entrada" id="usuario" name="usuario" value="{{ usuario }}"
+                 autocomplete="username" autofocus required>
+        </div>
+        <div class="campo">
+          <label for="codigo">Codigo de recuperacao</label>
+          <input class="entrada" id="codigo" name="codigo" placeholder="LEAD-XXXX-XXXX"
+                 autocomplete="off" spellcheck="false" required>
+        </div>
+        <div class="campo">
+          <label for="senha">Nova senha</label>
+          <input class="entrada" id="senha" name="senha" type="password"
+                 autocomplete="new-password" required>
+        </div>
+        <div class="campo">
+          <label for="senha2">Repita a nova senha</label>
+          <input class="entrada" id="senha2" name="senha2" type="password"
+                 autocomplete="new-password" required>
+        </div>
+        <button class="botao primario largo" type="submit" style="margin-top:8px">
+          Trocar senha
+        </button>
+      </form>
+
+      <div class="alerta alerta-info" style="text-align:left;margin-top:18px">
+        Perdeu os codigos? Peca ao administrador uma senha temporaria.
+      </div>
+
+      <p class="link-abaixo"><a href="{{ url_for('acesso.entrar') }}">Voltar</a></p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

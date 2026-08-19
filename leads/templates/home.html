@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block titulo %}Maquina de Leads{% endblock %}
+
+{% block corpo %}
+<div class="palco">
+  <div class="palco-conteudo">
+    <div class="lampada"></div>
+    <p class="marca">Maquina de Leads</p>
+    <h1>72 milhoes de empresas.<br>Filtre as suas.</h1>
+    <p class="diz">
+      Dados abertos da Receita Federal, prontos para exportar.
+      Atualizados todo mes.
+    </p>
+
+    <div class="duplo">
+      {% if primeiro_acesso %}
+        <a class="botao primario" href="{{ url_for('acesso.cadastrar') }}">Criar conta</a>
+        <a class="botao secundario" href="{{ url_for('acesso.entrar') }}">Entrar</a>
+      {% else %}
+        <a class="botao primario" href="{{ url_for('acesso.entrar') }}">Entrar</a>
+        <a class="botao secundario" href="{{ url_for('acesso.cadastrar') }}">Criar conta</a>
+      {% endif %}
+    </div>
+
+    {% if primeiro_acesso %}
+      <div class="alerta alerta-info" style="margin-top:26px;text-align:left">
+        Nenhuma conta existe ainda nesta maquina. A primeira que voce criar
+        sera a de administrador.
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

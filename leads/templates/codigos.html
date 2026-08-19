@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block titulo %}Codigos de recuperacao{% endblock %}
+
+{% block corpo %}
+<div class="palco">
+  <div class="palco-conteudo largo-medio">
+    <div class="lampada"></div>
+    <p class="marca">Guarde agora</p>
+    <h1>Codigos de recuperacao</h1>
+    <p class="diz">
+      Conta <strong>{{ de }}</strong> criada. Estes codigos aparecem
+      <strong>uma unica vez</strong>.
+    </p>
+
+    <div class="codigos">
+      {% for c in codigos %}<code>{{ c }}</code>{% endfor %}
+    </div>
+
+    <div class="alerta alerta-aviso" style="text-align:left">
+      Sao a unica forma de recuperar a senha sem falar com o administrador.
+      Cada um serve uma vez so. Tire uma foto, imprima ou salve no gerenciador
+      de senhas antes de sair desta tela: depois nem o administrador consegue
+      le-los de volta.
+    </div>
+
+    <div class="acoes" style="justify-content:center">
+      <button class="botao secundario" type="button" data-copiar>Copiar todos</button>
+      <a class="botao primario" href="{{ url_for('tela_busca') }}">Ja guardei, continuar</a>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var b = document.querySelector("[data-copiar]");
+    if (!b) return;
+    b.addEventListener("click", function () {
+      var txt = Array.prototype.map.call(
+        document.querySelectorAll(".codigos code"),
+        function (c) { return c.textContent.trim(); }).join("\n");
+      function feito() { b.textContent = "Copiado"; }
+      function seleciona() {
+        var r = document.createRange();
+        r.selectNodeContents(document.querySelector(".codigos"));
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        b.textContent = "Ctrl+C para copiar";
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(feito, seleciona);
+      } else { seleciona(); }
+    });
+  })();
+</script>
+{% endblock %}

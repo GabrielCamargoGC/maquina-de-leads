@@ -26,7 +26,7 @@ from urllib.parse import quote
 from flask import (Flask, Response, redirect, render_template, request,
                    send_file, url_for)
 
-from . import busca, config, estado, exportar, novidades
+from . import acesso, busca, config, estado, exportar, novidades
 
 app = Flask(__name__)
 
@@ -52,6 +52,11 @@ FAVICON = quote(
 @app.context_processor
 def _globais():
     return {"favicon": FAVICON}
+
+
+# Liga contas, sessao e o porteiro que exige login. Fica aqui, logo apos
+# criar o app, para que nenhuma rota registrada abaixo escape da protecao.
+acesso.instalar(app)
 
 
 # ------------------------------------------------------------ apoio
@@ -154,7 +159,7 @@ def _comum(pagina):
 # ------------------------------------------------------------ telas
 
 
-@app.route("/")
+@app.route("/busca")
 def tela_busca():
     f = FormFiltros(request.args)
     ctx = dict(_comum("busca"), f=f, query=f.query(), erro=None,
