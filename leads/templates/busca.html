@@ -6,7 +6,7 @@
 
 {% block conteudo %}
   <div class="card">
-    {{ ff.formulario('/', f, 'Buscar') }}
+    {{ ff.formulario(url_for('tela_busca'), f, 'Buscar') }}
   </div>
 
   {% if erro %}
@@ -21,7 +21,8 @@
           <div class="label">empresa(s) encontrada(s) em {{ '%.2f'|format(segundos) }}s</div>
         </div>
         {% if total %}
-        <form method="post" action="/exportar" class="acoes" style="margin:0">
+        <form method="post" action="{{ url_for('pedir_export') }}" class="acoes" style="margin:0">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
           {% for campo, valor in query.items() %}
             <input type="hidden" name="{{ campo }}" value="{{ valor }}">
           {% endfor %}

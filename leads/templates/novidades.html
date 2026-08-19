@@ -6,7 +6,7 @@
 
 {% block conteudo %}
   <div class="card">
-    {{ ff.formulario('/novidades', f, 'Ver novidades') }}
+    {{ ff.formulario(url_for('tela_novidades'), f, 'Ver novidades') }}
   </div>
 
   {% if erro %}
@@ -24,7 +24,8 @@
           </div>
         </div>
         {% if total %}
-        <form method="post" action="/exportar" class="acoes" style="margin:0">
+        <form method="post" action="{{ url_for('pedir_export') }}" class="acoes" style="margin:0">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
           {% for campo, valor in query.items() %}
             <input type="hidden" name="{{ campo }}" value="{{ valor }}">
           {% endfor %}

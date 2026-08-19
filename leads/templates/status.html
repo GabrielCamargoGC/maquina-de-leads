@@ -25,12 +25,12 @@
   <div class="card" style="padding:0">
     <div class="tabela-rolagem">
       <table>
-        <thead><tr><th>UF</th><th>Municipios</th><th>Estabelecimentos</th></tr></thead>
+        <thead><tr><th>UF</th><th class="num">Municipios</th><th class="num">Estabelecimentos</th></tr></thead>
         <tbody>
         {% for uf, mun, qtd in ufs %}
           <tr><td><strong>{{ uf }}</strong></td>
-              <td>{{ mun|milhar }}</td>
-              <td>{{ qtd|milhar }}</td></tr>
+              <td class="num">{{ mun|milhar }}</td>
+              <td class="num">{{ qtd|milhar }}</td></tr>
         {% endfor %}
         </tbody>
       </table>

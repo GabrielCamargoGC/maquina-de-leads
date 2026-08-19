@@ -389,11 +389,21 @@ tbody tr { transition: background .12s ease; }
 tbody tr:hover { background: var(--card-2); }
 td.num, .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* Linha recem-criada. Precisa vir dos tokens: com cor fixa (era #f4f7ff),
+   o destaque virava uma faixa branca no tema escuro e o texto sumia. */
+tbody tr.destaque { background: var(--sabre-fundo); }
+tbody tr.destaque td { color: var(--texto); }
+tbody tr.destaque:hover { background: var(--sabre-fundo); }
+
 .razao { font-weight: 600; color: var(--texto); }
 .fantasia { font-size: 12.5px; color: var(--texto-3); }
 .cnae-badge { font-size: 11.5px; color: var(--texto-3); font-variant-numeric: tabular-nums; }
-a.contato { color: var(--sabre-texto); text-decoration: none; font-size: 13px; }
-a.contato:hover { text-decoration: underline; }
+/* Todo link dentro de tabela usa o acento. Sem isto sobra o azul-violeta
+   padrao do navegador, que nao existe na paleta e ainda muda de cor depois
+   de visitado. */
+tbody a { color: var(--sabre-texto); text-decoration: none; font-weight: 500; }
+tbody a:hover { text-decoration: underline; }
+a.contato { font-size: 13px; font-weight: 400; }
 
 /* ---------------- pilulas de estado ---------------- */
 

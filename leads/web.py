@@ -203,6 +203,9 @@ def tela_novidades():
 
 @app.route("/exportar", methods=["POST"])
 def pedir_export():
+    # Export e POST autenticado: sem conferir o token, outro site poderia
+    # disparar exportacoes usando o cookie de quem esta logado.
+    acesso.conferir_csrf()
     f = FormFiltros(request.form)
     formato = request.form.get("formato", "csv")
     fonte = request.form.get("fonte", "busca")

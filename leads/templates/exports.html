@@ -23,7 +23,7 @@
         </thead>
         <tbody>
         {% for j in jobs %}
-          <tr {% if j.id == destaque %}style="background:#f4f7ff"{% endif %}>
+          <tr {% if j.id == destaque %}class="destaque"{% endif %}>
             <td>
               <div class="razao">{{ j.descricao or j.id }}</div>
               <div class="fantasia">{{ j.criado_em.replace('T', ' ') }}</div>
@@ -39,7 +39,7 @@
             <td><span class="fantasia">{{ j.formato|upper }}</span></td>
             <td>
               {% if j.estado == 'pronto' %}
-                <a class="botao" href="/exports/{{ j.id }}/baixar">Baixar</a>
+                <a class="botao secundario" href="{{ url_for('baixar_export', job_id=j.id) }}">Baixar</a>
               {% endif %}
             </td>
           </tr>
