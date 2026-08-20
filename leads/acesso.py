@@ -17,6 +17,7 @@ from functools import wraps
 
 from flask import (Blueprint, abort, redirect, render_template, request,
                    session, url_for)
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import auditoria, busca, config, contas, estado, saude
 
@@ -68,10 +69,32 @@ def token_csrf():
 
 def conferir_csrf():
     """Sem isto, um site qualquer poderia postar em /cadastrar ou
-    /trocar-senha usando o cookie de quem esta logado."""
+    /trocar-senha usando o cookie de quem esta logado.
+
+    Quando NAO ha token guardado, a causa quase sempre nao e ataque nem
+    formulario velho: e o cookie de sessao nao ter sido aceito. Ele e
+    marcado Secure, entao o navegador simplesmente o descarta em HTTP puro,
+    e a pessoa fica presa numa tela de "formulario expirado" que se repete
+    para sempre por mais que ela recarregue. Vale distinguir os dois casos --
+    o primeiro relato disso custou uma ida ao servidor para descobrir que
+    faltava so um "s" no endereco.
+    """
     enviado = request.form.get("csrf", "")
     guardado = session.get(CHAVE_CSRF, "")
-    if not guardado or not secrets.compare_digest(enviado, guardado):
+
+    if not guardado:
+        if not request.is_secure:
+            abort(400, (
+                "Este endereco foi aberto sem HTTPS, e por seguranca o "
+                "navegador descarta o cookie de sessao em conexao nao "
+                "segura. Abra o site com https:// no comeco do endereco."
+            ))
+        abort(400, (
+            "A sessao do navegador nao foi aceita. Verifique se os cookies "
+            "estao habilitados e tente de novo."
+        ))
+
+    if not secrets.compare_digest(enviado, guardado):
         abort(400, "Formulario expirado. Recarregue a pagina e tente de novo.")
 
 
@@ -114,6 +137,16 @@ def _ip():
 
 def instalar(app):
     """Liga o controle de acesso na aplicacao."""
+    # O cloudflared conversa com o site em HTTP puro no localhost, entao sem
+    # isto o Flask acha que TODA requisicao e insegura -- mesmo a de quem
+    # abriu o site em https. Quem sabe a verdade e o cabecalho
+    # X-Forwarded-Proto que o tunel manda.
+    #
+    # Confiar nesse cabecalho so e seguro porque o site escuta em localhost e
+    # o unico que fala com ele e o tunel. Exposto direto na rede, qualquer um
+    # poderia mentir nele.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
     app.secret_key = carregar_segredo()
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,   # JavaScript nao le o cookie
@@ -141,6 +174,15 @@ def instalar(app):
     @app.context_processor
     def _ctx():
         return {"usuario": usuario_atual(), "csrf": token_csrf()}
+
+    @app.errorhandler(400)
+    @app.errorhandler(403)
+    @app.errorhandler(404)
+    def _erro(e):
+        # A tela padrao do Flask e um HTML cru sem estilo. Quem cai nela ja
+        # esta com um problema; nao precisa achar que o site quebrou de vez.
+        return render_template("erro.html", codigo=e.code, nome=e.name,
+                               mensagem=e.description), e.code
 
 
 # ------------------------------------------------------------ telas

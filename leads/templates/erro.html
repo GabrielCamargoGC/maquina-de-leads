@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block titulo %}{{ codigo }} - Maquina de Leads{% endblock %}
+
+{% block corpo %}
+<div class="palco">
+  <div class="palco-conteudo">
+    <div class="lampada"></div>
+    <p class="marca">Erro {{ codigo }}</p>
+    <h1>{{ nome }}</h1>
+    <p class="diz">{{ mensagem }}</p>
+    <div class="duplo">
+      <a class="botao primario" href="{{ url_for('acesso.home') }}">Voltar ao inicio</a>
+      {% if codigo == 400 %}
+        <a class="botao secundario" href="{{ url_for('acesso.entrar') }}">Tentar entrar</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

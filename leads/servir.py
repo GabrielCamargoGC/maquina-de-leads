@@ -28,8 +28,26 @@ def main():
     app = web.criar_app()
     print(f"Leads CNPJ ouvindo em http://{args.host}:{args.porta} "
           f"({args.threads} threads)", flush=True)
-    serve(app, host=args.host, port=args.porta, threads=args.threads,
-          ident="leads-cnpj")
+
+    # trusted_proxy e obrigatorio aqui. O waitress APAGA os cabecalhos
+    # X-Forwarded-* de quem ele nao conhece -- protecao correta, porque
+    # qualquer um poderia mentir neles. So que o cloudflared fala do proprio
+    # localhost e e justamente ele quem informa, em X-Forwarded-Proto, que o
+    # visitante chegou por https.
+    #
+    # Sem declarar essa confianca, o site conclui que toda visita e insegura,
+    # mesmo a de quem digitou https: o cookie de sessao (marcado Secure) e
+    # tratado como impossivel e o login trava com "formulario expirado".
+    serve(
+        app,
+        host=args.host,
+        port=args.porta,
+        threads=args.threads,
+        ident="leads-cnpj",
+        trusted_proxy=args.host,
+        trusted_proxy_headers={"x-forwarded-for", "x-forwarded-proto",
+                               "x-forwarded-host"},
+    )
 
 
 if __name__ == "__main__":
