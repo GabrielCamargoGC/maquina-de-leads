@@ -237,6 +237,21 @@ def consolidar(dir_entrada, ufs=None, retomar=False):
     return total
 
 
+def conectar_manutencao(entrada):
+    """Conexao para tarefa que roda com o SITE NO AR.
+
+    Teto baixo de proposito. A conexao de importacao pede 5 GB, o que faz
+    sentido as 03:00, quando ela e a unica coisa acontecendo. Rodada durante
+    o expediente, esses 5 GB somados aos 2 GB do site e aos ~2 GB do Windows
+    passam dos 8 GB da maquina: ela comeca a paginar em disco, o site para de
+    responder e o Cloudflare corta a conexao com 524.
+
+    Aconteceu de verdade ao gerar o indice durante o dia. Mais lento e
+    aceitavel; derrubar o site para quem esta trabalhando nao e.
+    """
+    return conectar(temp_dir=entrada / "_tmp", memoria="2GB", threads=2)
+
+
 def gerar_indice_consulta(con, entrada, destino):
     """indice.parquet: chave -> CNPJ, para a tela de Consulta.
 
@@ -380,7 +395,20 @@ def main():
     )
     ap.add_argument("--entrada", default=str(config.DIR_NOVO))
     ap.add_argument("--ufs", help="so estes estados, ex.: SP,PR")
+    ap.add_argument("--so-indice", action="store_true",
+                    help="regenera apenas o indice de consulta, com teto de "
+                         "memoria baixo para nao atrapalhar o site no ar")
     args = ap.parse_args()
+
+    if args.so_indice:
+        entrada = Path(args.entrada)
+        con = conectar_manutencao(entrada)
+        try:
+            gerar_indice_consulta(con, entrada, entrada / "empresas_final")
+        finally:
+            con.close()
+        return
+
     consolidar(args.entrada, args.ufs.split(",") if args.ufs else None)
 
 
