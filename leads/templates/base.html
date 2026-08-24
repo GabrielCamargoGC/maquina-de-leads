@@ -129,6 +129,14 @@
   // dado limpo ("18997413539"), nao a versao formatada ("(18) 99741353"),
   // para colar direto em discador, planilha ou WhatsApp.
   (function () {
+    // Tique no mesmo tracado do icone de copiar, para a troca nao parecer
+    // que o botao virou outra coisa.
+    var TIQUE =
+      '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" ' +
+      'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" ' +
+      'stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+      '<path d="M20 6 9 17l-5-5"/></svg>';
+
     document.addEventListener("click", function (ev) {
       var b = ev.target.closest ? ev.target.closest("[data-copiar]") : null;
       if (!b) return;
@@ -136,11 +144,12 @@
       if (!valor) return;
 
       function feito() {
-        var antes = b.innerHTML;
-        b.innerHTML = "✓";
+        if (b.dataset.feito) return;          // clique repetido nao empilha
+        if (!b.dataset.icone) { b.dataset.icone = b.innerHTML; }
+        b.innerHTML = TIQUE;
         b.dataset.feito = "1";
         setTimeout(function () {
-          b.innerHTML = antes;
+          b.innerHTML = b.dataset.icone;
           delete b.dataset.feito;
         }, 1200);
       }

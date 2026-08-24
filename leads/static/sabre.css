@@ -697,15 +697,17 @@ code.destaque {
   background: transparent;
   color: var(--texto-3);
   cursor: pointer;
-  padding: 2px 4px;
-  margin-left: 4px;
-  border-radius: 5px;
-  font-size: 12px;
-  line-height: 1;
-  vertical-align: middle;
+  padding: 3px;
+  margin-left: 5px;
+  border-radius: 6px;
+  line-height: 0;                 /* o SVG define a altura, nao a fonte */
+  display: inline-flex;
+  align-items: center;
+  vertical-align: -3px;           /* alinha com a base do texto ao lado */
   opacity: 0;
   transition: opacity .14s ease, color .14s ease, background .14s ease;
 }
+.copiar-mini svg { display: block; }
 tr:hover .copiar-mini,
 .copiar-mini:focus-visible { opacity: 1; }
 .copiar-mini:hover { color: var(--sabre-texto); background: var(--sabre-fundo); }
