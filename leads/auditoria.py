@@ -36,6 +36,7 @@ SENHA_TEMPORARIA = "senha_temporaria"
 CODIGO_USADO = "codigo_recuperacao_usado"
 CODIGOS_REFEITOS = "codigos_refeitos"
 EXPORTOU = "exportou"
+CODIGO_ATUALIZADO = "codigo_atualizado"
 
 ROTULOS = {
     LOGIN_OK: "Entrou",
@@ -50,10 +51,12 @@ ROTULOS = {
     CODIGO_USADO: "Recuperou com codigo",
     CODIGOS_REFEITOS: "Codigos de recuperacao refeitos",
     EXPORTOU: "Exportou planilha",
+    CODIGO_ATUALIZADO: "Codigo atualizado",
 }
 
 # Eventos que merecem destaque na tela do master.
-GRAVES = {LOGIN_ERRO, LOGIN_BLOQUEADO, CONTA_DESATIVADA, SENHA_TEMPORARIA}
+GRAVES = {LOGIN_ERRO, LOGIN_BLOQUEADO, CONTA_DESATIVADA, SENHA_TEMPORARIA,
+          CODIGO_ATUALIZADO}
 
 
 def criar_tabelas():

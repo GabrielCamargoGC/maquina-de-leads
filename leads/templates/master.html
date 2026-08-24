@@ -36,6 +36,95 @@
   </div>
 {% endif %}
 
+{# ---------------- atualizar o codigo ---------------- #}
+
+{% if codigo %}
+  {% if codigo.tipo == 'conferido' %}
+    <div class="card">
+      <h2>Atualizacao do codigo</h2>
+      {% if codigo.erro %}
+        <div class="alerta alerta-erro">{{ codigo.erro }}</div>
+      {% elif codigo.pendentes %}
+        <p class="dica" style="margin-bottom:12px">
+          {{ codigo.pendentes|length }} mudanca(s) esperando para entrar:
+        </p>
+        <div class="tabela-rolagem">
+          <table><tbody>
+            {% for c in codigo.pendentes %}
+              <tr><td class="fantasia">{{ c }}</td></tr>
+            {% endfor %}
+          </tbody></table>
+        </div>
+        {% if codigo.tem_mudanca_local %}
+          <div class="alerta alerta-aviso">
+            Ha arquivos alterados na propria maquina. Atualizar por cima
+            apagaria essas mudancas, entao o botao esta bloqueado.
+            <pre style="margin-top:8px;white-space:pre-wrap;font-size:12px">{{ codigo.mudanca_local }}</pre>
+          </div>
+        {% else %}
+          <form method="post" action="{{ url_for('acesso.master_codigo') }}"
+                class="acoes" data-espera="Baixando e reiniciando o site.">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="botao primario" name="acao" value="aplicar">
+              Aplicar e reiniciar
+            </button>
+          </form>
+        {% endif %}
+      {% else %}
+        <div class="alerta alerta-ok">
+          O codigo desta maquina ja esta igual ao do GitHub.
+        </div>
+      {% endif %}
+    </div>
+
+  {% else %}
+    <div class="card">
+      <h2>Atualizacao do codigo</h2>
+      <div class="alerta {{ 'alerta-ok' if codigo.ok else 'alerta-erro' }}">
+        {% if codigo.ok %}Codigo atualizado.{% else %}Nao deu certo.{% endif %}
+      </div>
+      {% if codigo.saida %}
+        <pre style="white-space:pre-wrap;font-size:12.5px;margin-top:10px">{{ codigo.saida }}</pre>
+      {% endif %}
+      {% if codigo.dependencias %}
+        <div class="alerta alerta-aviso">
+          As dependencias podem nao ter sido instaladas:
+          <pre style="white-space:pre-wrap;font-size:12px">{{ codigo.dependencias }}</pre>
+        </div>
+      {% endif %}
+      {% if codigo.reinicio %}
+        <div class="alerta {{ 'alerta-info' if codigo.reinicio_ok else 'alerta-aviso' }}">
+          {{ codigo.reinicio }} Se a pagina der erro nos proximos segundos,
+          espere e recarregue -- o site esta subindo de novo.
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endif %}
+
+<div class="card">
+  <h2>Codigo</h2>
+  <div class="tabela-rolagem">
+    <table><tbody>
+      <tr><td style="width:34%"><strong>Versao na maquina</strong></td>
+          <td class="fantasia">{{ codigo_situacao.commit_atual or '—' }}</td></tr>
+      <tr><td><strong>Ramo</strong></td><td class="fantasia">{{ codigo_situacao.ramo }}</td></tr>
+      <tr><td><strong>Origem</strong></td><td class="fantasia">{{ codigo_situacao.origem }}</td></tr>
+    </tbody></table>
+  </div>
+  <form method="post" action="{{ url_for('acesso.master_codigo') }}"
+        class="acoes" data-espera="Consultando o GitHub.">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="botao secundario" name="acao" value="conferir">
+      Ver se ha atualizacao
+    </button>
+  </form>
+  <p class="dica">
+    Confere primeiro e mostra o que viria. So depois aparece o botao de
+    aplicar — atualizar as cegas uma maquina sem monitor e o que nao queremos.
+  </p>
+</div>
+
 {# ---------------- saude ---------------- #}
 
 <div class="card">

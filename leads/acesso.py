@@ -19,7 +19,8 @@ from flask import (Blueprint, abort, redirect, render_template, request,
                    session, url_for)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import auditoria, busca, config, contas, estado, saude
+from . import (atualizar_codigo, auditoria, busca, config, contas,
+               estado, saude)
 
 bp = Blueprint("acesso", __name__)
 
@@ -368,16 +369,52 @@ def master():
         "master.html",
         pagina="master",
         maquina=saude.coletar(),
+        codigo_situacao=atualizar_codigo.situacao(),
         usuarios=contas.listar_usuarios(),
         eventos=auditoria.listar(limite=60),
         resumo=auditoria.resumo(horas=24),
         rotulos=auditoria.ROTULOS,
         base_pronta=busca.base_pronta(),
         info_base=estado.ler(),
+        codigo=session.pop("codigo_resultado", None),
         senha_gerada=session.pop("senha_gerada", None),
         codigos_gerados=session.pop("codigos_gerados", None),
         aviso=session.pop("aviso_master", None),
     )
+
+
+@bp.route("/master/codigo", methods=["POST"])
+@exigir_master
+def master_codigo():
+    """Ver e aplicar atualizacao do codigo, sem teclado na maquina.
+
+    Dois passos separados: primeiro mostra o que viria, depois aplica. Um
+    botao so, que baixa e reinicia de uma vez, seria atualizar as cegas um
+    servidor que ninguem consegue ver.
+    """
+    conferir_csrf()
+    eu = usuario_atual()
+    acao = request.form.get("acao")
+
+    if acao == "conferir":
+        session["codigo_resultado"] = {"tipo": "conferido", **atualizar_codigo.conferir()}
+        return redirect(url_for("acesso.master"))
+
+    if acao == "aplicar":
+        ok, saida = atualizar_codigo.aplicar()
+        resultado = {"tipo": "aplicado", "ok": ok, "saida": saida}
+        if ok:
+            ok_dep, saida_dep = atualizar_codigo.instalar_dependencias()
+            resultado["dependencias"] = saida_dep if not ok_dep else None
+            ok_r, msg_r = atualizar_codigo.reiniciar_servico()
+            resultado["reinicio"] = msg_r
+            resultado["reinicio_ok"] = ok_r
+        auditoria.registrar(auditoria.CODIGO_ATUALIZADO, usuario=eu["usuario"],
+                            ip=_ip(), ok=ok, saida=saida[:300])
+        session["codigo_resultado"] = resultado
+        return redirect(url_for("acesso.master"))
+
+    return redirect(url_for("acesso.master"))
 
 
 @bp.route("/master/acao", methods=["POST"])
