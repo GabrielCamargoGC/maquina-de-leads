@@ -26,9 +26,25 @@ from urllib.parse import quote
 from flask import (Flask, Response, redirect, render_template, request,
                    send_file, url_for)
 
-from . import acesso, auditoria, busca, config, estado, exportar, novidades
+from . import (acesso, auditoria, busca, config, consulta, estado,
+               exportar, novidades)
 
 app = Flask(__name__)
+
+
+@app.template_filter("data")
+def _data(d):
+    """2019-02-18 -> 18/02/2019. Data em formato ISO na tela faz o leitor
+    brasileiro parar para interpretar; o formato daqui ele le sem pensar."""
+    if not d:
+        return "—"
+    try:
+        return d.strftime("%d/%m/%Y")
+    except AttributeError:
+        texto = str(d)[:10]
+        if len(texto) == 10 and texto[4] == "-":
+            return f"{texto[8:10]}/{texto[5:7]}/{texto[0:4]}"
+        return texto
 
 
 @app.template_filter("milhar")
@@ -178,6 +194,39 @@ def tela_busca():
             traceback.print_exc()
             ctx["erro"] = f"Erro inesperado na busca: {e}"
     return render_template("busca.html", **ctx)
+
+
+@app.route("/consulta")
+def tela_consulta():
+    termo = (request.args.get("termo") or "").strip()
+    ctx = dict(_comum("consulta"), termo=termo, total=None, linhas=[],
+               tipo=None, descricao=None, aviso=None, segundos=0.0)
+
+    if termo and ctx["base_pronta"]:
+        t0 = time.time()
+        try:
+            linhas, tipo, aviso = consulta.procurar(termo)
+            ctx.update(linhas=linhas, total=len(linhas), tipo=tipo,
+                       descricao=consulta.DESCRICAO.get(tipo), aviso=aviso,
+                       segundos=time.time() - t0)
+        except Exception as e:
+            traceback.print_exc()
+            ctx["aviso"] = f"Erro inesperado na consulta: {e}"
+    return render_template("consulta.html", **ctx)
+
+
+@app.route("/empresa/<cnpj>")
+def tela_empresa(cnpj):
+    e = consulta.uma(cnpj)
+    if not e:
+        return render_template("erro.html", codigo=404, nome="Empresa nao encontrada",
+                               mensagem="Nenhum estabelecimento com esse CNPJ na base "
+                                        "atual.", **_comum("consulta")), 404
+    return render_template(
+        "empresa.html", **_comum("consulta"), e=e,
+        secundarios=consulta.cnaes_secundarios(e.get("cnae_secundaria")),
+        irmas=consulta.irmas(e.get("cnpj_basico"), e.get("cnpj_numerico")),
+    )
 
 
 @app.route("/novidades")

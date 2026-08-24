@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block titulo %}Consulta — Maquina de Leads{% endblock %}
+{% block cabecalho %}Consulta{% endblock %}
+{% block subtitulo %}Ache uma empresa por CNPJ, telefone ou nome.{% endblock %}
+
+{% block conteudo %}
+  <div class="card">
+    <form method="get" action="{{ url_for('tela_consulta') }}"
+          data-espera="Procurando na base da Receita.">
+      <div class="linha-form">
+        <div class="campo">
+          <label for="termo">CNPJ, telefone ou nome</label>
+          <input class="entrada" id="termo" name="termo" value="{{ termo or '' }}"
+                 placeholder="11.222.333/0001-81  ·  18 3322-1100  ·  Padaria do Joao"
+                 autocomplete="off" autofocus>
+          <p class="dica">
+            Um campo so. CNPJ com ou sem pontos, telefone com DDD, ou parte do
+            nome. So a raiz do CNPJ (8 digitos) traz a matriz e todas as filiais.
+          </p>
+        </div>
+      </div>
+      <div class="acoes">
+        <button class="botao primario" type="submit">Procurar</button>
+      </div>
+    </form>
+  </div>
+
+  {% if aviso %}
+    <div class="card"><div class="alerta alerta-aviso">{{ aviso }}</div></div>
+  {% endif %}
+
+  {% if termo and total is not none %}
+    <div class="card">
+      <div class="resumo">
+        <div>
+          <div class="num">{{ total }}</div>
+          <div class="label">
+            {% if total == 1 %}resultado{% else %}resultados{% endif %}
+            {% if tipo %}· procurado como {{ descricao }}{% endif %}
+            · {{ '%.2f'|format(segundos) }}s
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if linhas %}
+      <div class="card" style="padding:0">
+        <div class="tabela-rolagem">
+          <table>
+            <thead>
+              <tr><th>Empresa</th><th>CNPJ</th><th>Situacao</th>
+                  <th>Cidade</th><th>Contato</th><th></th></tr>
+            </thead>
+            <tbody>
+            {% for l in linhas %}
+              <tr>
+                <td>
+                  <div class="razao">{{ l.razao_social or '(sem razao social)' }}</div>
+                  {% if l.nome_fantasia %}<div class="fantasia">{{ l.nome_fantasia }}</div>{% endif %}
+                  <div class="cnae-badge">{{ l.matriz_filial_desc }}</div>
+                </td>
+                <td class="num">{{ l.cnpj }}</td>
+                <td>
+                  <span class="pill {{ 'pill-sim' if l.situacao_desc == 'Ativa' else 'pill-nao' }}">
+                    {{ l.situacao_desc }}
+                  </span>
+                </td>
+                <td>{{ l.municipio }}/{{ l.uf }}</td>
+                <td>
+                  {% if l.telefone_fmt %}<div>{{ l.telefone_fmt }}</div>{% endif %}
+                  {% if l.email %}<a class="contato" href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}
+                </td>
+                <td>
+                  <a class="botao secundario" style="padding:6px 14px;font-size:13px"
+                     href="{{ url_for('tela_empresa', cnpj=l.cnpj_numerico) }}">Ver tudo</a>
+                </td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% else %}
+      <div class="card">
+        <div class="alerta alerta-aviso">
+          Nada encontrado para <strong>{{ termo }}</strong>.
+          {% if tipo == 'nome' %}
+            Tente o comeco do nome, ou so uma palavra dele.
+          {% elif tipo == 'telefone' %}
+            Confira o DDD. A Receita so tem o telefone que a empresa declarou.
+          {% else %}
+            Confira os digitos do CNPJ.
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock %}

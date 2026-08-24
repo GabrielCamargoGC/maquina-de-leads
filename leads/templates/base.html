@@ -36,6 +36,7 @@
     </div>
     <nav>
       <a href="/busca" class="{{ 'ativo' if pagina == 'busca' }}">Busca</a>
+      <a href="/consulta" class="{{ 'ativo' if pagina == 'consulta' }}">Consulta</a>
       <a href="/novidades" class="{{ 'ativo' if pagina == 'novidades' }}">Empresas novas</a>
       <a href="/exports" class="{{ 'ativo' if pagina == 'exports' }}">Planilhas</a>
       <a href="/status" class="{{ 'ativo' if pagina == 'status' }}">Base</a>
@@ -74,7 +75,51 @@
 </div>
 {% endblock %}
 
+<div class="carregando" data-carregando aria-live="polite" aria-hidden="true">
+  <div class="caixa">
+    <div class="girando" role="status" aria-label="Carregando"></div>
+    <div class="texto">Carregando…</div>
+    <div class="detalhe" data-carregando-detalhe></div>
+  </div>
+</div>
+
 <script>
+  // Mostra "carregando" ao enviar qualquer formulario de consulta.
+  //
+  // A pagina e gerada no servidor, entao o navegador ate mostra a rodinha
+  // dele na aba -- mas ninguem olha para a aba. Sem sinal DENTRO da pagina, a
+  // pessoa acha que o clique nao pegou e clica de novo, o que enfileira outra
+  // consulta e deixa tudo mais lento.
+  (function () {
+    var painel = document.querySelector("[data-carregando]");
+    if (!painel) return;
+    var detalhe = painel.querySelector("[data-carregando-detalhe]");
+
+    function mostrar(texto) {
+      if (detalhe) { detalhe.textContent = texto || ""; }
+      painel.setAttribute("data-visivel", "1");
+      painel.setAttribute("aria-hidden", "false");
+    }
+
+    document.querySelectorAll("form[data-espera]").forEach(function (form) {
+      form.addEventListener("submit", function () {
+        var botao = form.querySelector("button[type=submit], button:not([type])");
+        if (botao) { botao.dataset.esperando = "1"; }
+        mostrar(form.getAttribute("data-espera"));
+      });
+    });
+
+    // Voltar pelo historico traz a pagina do cache com o overlay ainda
+    // aberto; sem isto a tela fica travada num "carregando" que ja terminou.
+    window.addEventListener("pageshow", function () {
+      painel.removeAttribute("data-visivel");
+      painel.setAttribute("aria-hidden", "true");
+      document.querySelectorAll("[data-esperando]").forEach(function (b) {
+        delete b.dataset.esperando;
+      });
+    });
+  })();
+
   // Alterna claro/escuro e guarda a escolha. Sem escolha salva, a pagina
   // segue o tema do sistema -- por isso o botao le o estado efetivo, e nao
   // so o atributo.

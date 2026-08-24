@@ -590,3 +590,67 @@ code.destaque {
   body { background: #fff; color: #000; }
   .card { box-shadow: none; border-color: #ccc; }
 }
+
+
+/* ---------------- carregando ---------------- */
+
+/* Busca em cidade grande passa de um segundo, e consulta por trecho de nome
+   varre a base inteira. Sem sinal na tela a pessoa acha que o clique nao
+   pegou e clica de novo -- o que enfileira outra consulta e piora. */
+
+.carregando {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: none;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(3px);
+}
+.carregando[data-visivel="1"] { display: grid; }
+
+.carregando .caixa {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 30px 40px;
+  background: var(--card);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra-alta);
+}
+
+.carregando .texto {
+  font-size: 15px;
+  font-weight: 550;
+  letter-spacing: -.008em;
+  color: var(--texto);
+}
+.carregando .detalhe { font-size: 13px; color: var(--texto-3); margin-top: -8px; }
+
+/* o sabre girando: mesmo elemento da marca, agora em movimento */
+.girando {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--linha);
+  border-top-color: var(--sabre);
+  animation: girar .7s linear infinite;
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+
+/* Sem animacao, vira barra pulsando de leve -- ainda comunica "estou
+   trabalhando" para quem pediu menos movimento no sistema. */
+@media (prefers-reduced-motion: reduce) {
+  .girando {
+    animation: none;
+    border-radius: 4px;
+    width: 90px; height: 5px;
+    border: none;
+    background: linear-gradient(90deg, var(--sabre-texto), var(--sabre));
+    opacity: .85;
+  }
+}
+
+/* botao que disparou fica desabilitado enquanto espera */
+.botao[data-esperando="1"] { opacity: .6; cursor: progress; }

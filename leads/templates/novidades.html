@@ -24,7 +24,8 @@
           </div>
         </div>
         {% if total %}
-        <form method="post" action="{{ url_for('pedir_export') }}" class="acoes" style="margin:0">
+        <form method="post" action="{{ url_for('pedir_export') }}" class="acoes" style="margin:0"
+              data-espera="Montando a planilha e colocando na fila.">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           {% for campo, valor in query.items() %}
             <input type="hidden" name="{{ campo }}" value="{{ valor }}">

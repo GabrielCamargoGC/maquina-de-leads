@@ -5,7 +5,8 @@
   e o outro fique atras.
 #}
 {% macro formulario(acao, f, rotulo_botao) %}
-<form method="get" action="{{ acao }}">
+<form method="get" action="{{ acao }}"
+      data-espera="Varrendo a base da Receita. Cidade grande pode levar alguns segundos.">
   <div class="linha-form">
     <div class="campo">
       <label>Cidades</label>

@@ -227,6 +227,7 @@ def consolidar(dir_entrada, ufs=None, retomar=False):
         sys.exit("[erro] nenhum balde encontrado em estabelecimentos/.")
 
     total = gerar_indice_cidades(con, entrada, destino)
+    gerar_indice_consulta(con, entrada, destino)
     validar(con, entrada, destino)
 
     con.close()
@@ -234,6 +235,65 @@ def consolidar(dir_entrada, ufs=None, retomar=False):
     _log(f"Consolidado: {total:,} linhas em {time.time()-t0:.0f}s "
          f"-> {destino} ({_fmt(_tamanho(destino))})")
     return total
+
+
+def gerar_indice_consulta(con, entrada, destino):
+    """indice.parquet: chave -> CNPJ, para a tela de Consulta.
+
+    Uma linha por razao social, nome fantasia e telefone. A chave vai
+    normalizada (maiuscula, sem acento; telefone so com digitos) e o arquivo
+    sai ORDENADO por ela -- e a ordenacao que faz o truque: o Parquet guarda
+    o menor e o maior valor de cada bloco, entao procurar "PADARIA DO" abre
+    dois ou tres blocos em vez do arquivo inteiro.
+
+    Guarda so a chave e o CNPJ. O resto dos dados vem depois da base
+    principal, buscando pelo CNPJ -- que e instantaneo, porque o balde da
+    particao e o ultimo digito do cnpj_basico. Carregar os dados aqui
+    tambem so faria o indice inchar.
+
+    Nao substitui a base em nada: quem procura por trecho no meio do nome
+    continua varrendo a base principal, que para esse caso e menor que o
+    indice. O indice acelera busca exata e "comeca com", e mais nada.
+    """
+    alvo = entrada / "indice.parquet"
+    fonte = (destino / "**" / "*.parquet").as_posix()
+    leitura = (f"read_parquet('{fonte}', hive_partitioning=1, "
+               f"hive_types={hive_tipos_sql()})")
+
+    con.execute(
+        f"""COPY (
+                SELECT chave, tipo, cnpj_numerico FROM (
+                    SELECT upper(strip_accents(razao_social)) AS chave,
+                           'R' AS tipo, cnpj_numerico
+                    FROM {leitura}
+                    WHERE razao_social IS NOT NULL AND razao_social <> ''
+
+                    UNION ALL
+                    SELECT upper(strip_accents(nome_fantasia)), 'F', cnpj_numerico
+                    FROM {leitura}
+                    WHERE nome_fantasia IS NOT NULL AND nome_fantasia <> ''
+
+                    -- telefone entra com DDD colado e so digitos, que e como
+                    -- a tela normaliza o que a pessoa digita
+                    UNION ALL
+                    SELECT ddd1 || telefone1, 'T', cnpj_numerico
+                    FROM {leitura}
+                    WHERE telefone1 IS NOT NULL AND telefone1 <> ''
+
+                    UNION ALL
+                    SELECT ddd2 || telefone2, 'T', cnpj_numerico
+                    FROM {leitura}
+                    WHERE telefone2 IS NOT NULL AND telefone2 <> ''
+                )
+                ORDER BY chave
+            ) TO '{alvo.as_posix()}'
+              (FORMAT PARQUET, COMPRESSION {COMPRESSAO}, ROW_GROUP_SIZE 200000)"""
+    )
+    n = con.execute(
+        f"SELECT count(*) FROM read_parquet('{alvo.as_posix()}')"
+    ).fetchone()[0]
+    _log(f"  indice de consulta: {n:,} chaves ({_fmt(_tamanho(alvo))})")
+    return n
 
 
 def gerar_indice_cidades(con, entrada, destino):
