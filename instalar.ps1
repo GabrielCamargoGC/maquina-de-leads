@@ -155,6 +155,28 @@ if ($SemFerramentas) {
     }
 }
 
+# --- 2b. git: dono da pasta -------------------------------------------------
+Passo "2b/6 permissao do Git na pasta"
+
+# O servico roda como SISTEMA, mas C:\leads pertence a quem clonou. O Git
+# recusa operar em repositorio de outro dono ("dubious ownership") e o botao
+# de atualizar no painel master quebra com uma mensagem que nao parece ter
+# nada a ver. --system e nao --global: precisa valer para o SISTEMA tambem,
+# nao so para quem esta rodando o instalador.
+if (Test-Path (Join-Path $Raiz ".git")) {
+    $caminhoGit = $Raiz -replace "\\", "/"
+    $r = Externo git "config" "--system" "--add" "safe.directory" $caminhoGit
+    if ($r.Codigo -eq 0) {
+        Ok "Git autorizado a ler $caminhoGit como SISTEMA"
+    } else {
+        Aviso "nao consegui autorizar o Git nesta pasta; o botao de atualizar"
+        Aviso "no painel master pode falhar. Rode como Administrador:"
+        Aviso "  git config --system --add safe.directory $caminhoGit"
+    }
+} else {
+    Info "pasta nao e um repositorio git, pulando"
+}
+
 # --- 3. energia --------------------------------------------------------------
 Passo "3/6 energia (o site cai se a maquina dormir)"
 
