@@ -84,6 +84,9 @@
                 <td>
                   {% if l.telefone_fmt %}<div>{{ l.telefone_fmt }}</div>{% endif %}
                   {% if l.email %}<a class="contato" href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}
+                  {% for m in l.motivos or [] %}
+                    <span class="pill pill-espera" style="margin-top:4px">{{ m }}</span>
+                  {% endfor %}
                 </td>
                 <td>
                   <a class="botao secundario" style="padding:6px 14px;font-size:13px"

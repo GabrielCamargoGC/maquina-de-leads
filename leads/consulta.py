@@ -79,27 +79,89 @@ def detectar(termo):
     return NOME, normalizar(termo)
 
 
-def variantes_telefone(digitos):
-    """Formas sob as quais um telefone pode estar guardado na base.
+def analisar_telefone(digitos):
+    """Separa DDD e numero, e lista as formas em que o numero pode estar.
 
-    O campo TELEFONE da Receita tem 8 caracteres. Foi definido antes de o
-    celular ganhar o nono digito e nunca foi ampliado, entao TODO celular na
-    base do CNPJ chega com o ultimo digito cortado: 18 997413539 esta gravado
-    como 18 99741353.
+    O campo da Receita comporta 8 caracteres e o celular hoje tem 9, entao um
+    numero atual nunca esta la inteiro. Dois casos reais mostraram encaixes
+    diferentes: num deles o que estava gravado batia com o COMECO do numero
+    atual, no outro com o FIM. Nao da para saber qual dos dois aconteceu em
+    cada registro, entao procuramos pelas duas formas.
 
-    Conferido no arquivo bruto da Receita, nao deduzido -- e o dado que vem de
-    la, nao perda nossa. O digito cortado nao da para recuperar (telefone nao
-    tem digito verificador), mas da para PROCURAR pelas duas formas, que e o
-    que importa para quem tem o numero completo em maos.
+    Devolve (ddd_digitado, [formas do numero, da mais provavel para a menos]).
     """
     d = so_digitos(digitos)
-    formas = [d]
-    if len(d) == 11:
-        formas.append(d[:10])   # como a Receita guardou: DDD + 8 digitos
-    elif len(d) == 10 and d[2:3] == "9":
-        # ja veio truncado; tentar completar seria chutar o ultimo digito
-        pass
-    return formas
+    ddd, corpo = "", d
+    if len(d) in (10, 11):
+        ddd, corpo = d[:2], d[2:]
+
+    formas = [corpo]
+    if len(corpo) == 9:
+        if corpo.startswith("9"):
+            formas.append(corpo[1:])   # cadastro pre-2012, sem o 9 da frente
+        formas.append(corpo[:8])       # gravado cortando o fim
+    # remove repetidos preservando a ordem de probabilidade
+    vistas, saida = set(), []
+    for f in formas:
+        if f and f not in vistas:
+            vistas.add(f)
+            saida.append(f)
+    return ddd, saida
+
+
+def _motivos(chave, ddd_achado, ddd_digitado, formas):
+    """Nota de proximidade e as etiquetas que a tela mostra.
+
+    A nota existe para ordenar; as etiquetas, para a pessoa julgar. Devolver
+    um resultado de DDD diferente sem dizer isso seria pior que nao devolver
+    -- ela ligaria achando que e a empresa certa.
+    """
+    nota, etiquetas = 0, []
+
+    if ddd_digitado and ddd_achado == ddd_digitado:
+        nota += 100
+    elif ddd_digitado and ddd_achado:
+        etiquetas.append("DDD diferente")
+
+    if chave == formas[0]:
+        nota += 50
+    elif len(formas) > 1 and chave == formas[1]:
+        nota += 30
+        etiquetas.append("formato antigo")
+    elif len(formas) > 2 and chave == formas[2]:
+        nota += 30
+        etiquetas.append("gravado incompleto")
+
+    return nota, etiquetas
+
+
+def _telefones_parecidos(formas, ddd_digitado, dir_dados, limite):
+    """CNPJs cujo numero bate com alguma das formas, ja ordenados.
+
+    Devolve (lista de (cnpj, uf, etiquetas), None) ou (None, None) quando o
+    indice nao pode ser lido -- quem chama cai para a varredura.
+    """
+    caminho = _indice("T", dir_dados)
+    if not Path(caminho).exists():
+        return None
+    cur = busca.conexao(dir_dados).cursor()
+    marcas = ",".join("?" for _ in formas)
+    try:
+        linhas = cur.execute(
+            f"SELECT DISTINCT chave, ddd, cnpj_numerico, uf "
+            f"FROM read_parquet('{caminho}') WHERE chave IN ({marcas}) "
+            f"LIMIT {int(limite) * 4}",
+            list(formas),
+        ).fetchall()
+    except Exception:
+        return None
+
+    pontuados = []
+    for chave, ddd, cnpj, uf in linhas:
+        nota, etiquetas = _motivos(chave, ddd or "", ddd_digitado, formas)
+        pontuados.append((nota, cnpj, uf, etiquetas))
+    pontuados.sort(key=lambda x: -x[0])
+    return [(c, u, e) for _, c, u, e in pontuados[:limite]]
 
 
 def celular_antigo(ddd, numero):
@@ -245,33 +307,38 @@ def procurar(termo, limite=LIMITE_PADRAO, dir_dados=None, amplo=False):
         return [dict(zip(nomes, l)) for l in rel.fetchall()], tipo, None
 
     if tipo == TELEFONE:
-        formas = variantes_telefone(valor)
-        achados, usou_truncado = None, False
-        for i, forma in enumerate(formas):
-            r = _chaves(forma, "T", limite=limite, dir_dados=dir_dados)
-            if r is None:
-                achados = None
-                break
-            achados = r
-            if r:
-                usou_truncado = i > 0
-                break
-        if achados is not None:
+        ddd_digitado, formas = analisar_telefone(valor)
+        parecidos = _telefones_parecidos(formas, ddd_digitado, dir_dados, limite)
+        if parecidos is not None:
+            linhas = _por_cnpjs([c for c, _, _ in parecidos], dir_dados, limite,
+                                ufs=[u for _, u, _ in parecidos])
+            # cola as etiquetas de proximidade em cada linha e devolve na
+            # ordem do ranking, nao na ordem que o parquet entregou
+            etiquetas = {c: e for c, _, e in parecidos}
+            ordem = {c: i for i, (c, _, _) in enumerate(parecidos)}
+            for l in linhas:
+                l["motivos"] = etiquetas.get(l["cnpj_numerico"], [])
+            linhas.sort(key=lambda l: ordem.get(l["cnpj_numerico"], 999))
             aviso = None
-            if usou_truncado:
-                aviso = ("A Receita guarda o telefone com 8 digitos, entao o "
-                         "ultimo digito do celular nao esta na base. Procurei "
-                         "pelo numero sem ele.")
-            return (_por_cnpjs([c for c, _ in achados], dir_dados, limite,
-                               ufs=[u for _, u in achados]), tipo, aviso)
+            if linhas and any(l["motivos"] for l in linhas):
+                aviso = ("Alguns resultados nao batem exatamente com o que voce "
+                         "digitou -- o cadastro da Receita costuma ser antigo. "
+                         "As etiquetas ao lado dizem em que cada um difere.")
+            return linhas, tipo, aviso
+        # sem indice: mesma logica, mas varrendo. Compara so o numero, pelo
+        # mesmo motivo -- o DDD do cadastro erra com frequencia.
         marcas = ",".join("?" for _ in formas)
         sql = (f"SELECT {', '.join(COLUNAS)} FROM {_leitura(dir_dados)} "
-               f"WHERE (ddd1 || telefone1) IN ({marcas}) "
-               f"   OR (ddd2 || telefone2) IN ({marcas}) "
+               f"WHERE telefone1 IN ({marcas}) OR telefone2 IN ({marcas}) "
                f"LIMIT {int(limite)}")
         rel = cur.execute(sql, formas + formas)
         nomes = [d[0] for d in rel.description]
-        return ([dict(zip(nomes, l)) for l in rel.fetchall()], tipo,
+        linhas = [dict(zip(nomes, l)) for l in rel.fetchall()]
+        for l in linhas:
+            achou = l.get("telefone1") if l.get("telefone1") in formas else l.get("telefone2")
+            _, l["motivos"] = _motivos(achou or "", l.get("ddd1") or "",
+                                       ddd_digitado, formas)
+        return (linhas, tipo,
                 "Sem indice nesta base: a consulta por telefone varreu tudo.")
 
     # --- nome ---

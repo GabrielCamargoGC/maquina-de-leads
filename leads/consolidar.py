@@ -293,16 +293,23 @@ def gerar_indice_consulta(con, entrada, destino, progresso=None):
         ("F", "nome fantasia",
          f"SELECT upper(strip_accents(nome_fantasia)) AS chave, cnpj_numerico, uf "
          f"FROM {leitura} WHERE nome_fantasia IS NOT NULL AND nome_fantasia <> ''"),
-        # So digitos: o campo da Receita as vezes vem com espaco ou tracinho,
-        # e a chave precisa ficar igual ao que a tela produz a partir do que a
-        # pessoa digitou. Colar ddd e telefone crus fazia um numero existente
-        # nao ser encontrado.
+        # A chave e o NUMERO sozinho, com o DDD numa coluna ao lado -- e nao
+        # os dois grudados. O DDD e o campo mais podre da base: medido em 2
+        # milhoes de registros, ~10% tem tamanho invalido (1, 3 ou 4 digitos).
+        # Grudado, um DDD errado tornava o telefone impossivel de achar mesmo
+        # com o numero inteiro em maos. Separado, da para procurar pelo numero
+        # e usar o DDD so para ordenar quem e mais provavel.
+        #
+        # So digitos dos dois lados: o campo as vezes vem com espaco ou
+        # tracinho, e a chave precisa ficar igual ao que a tela produz.
         ("T", "telefone",
-         f"SELECT regexp_replace(ddd1 || telefone1, '[^0-9]', '', 'g') AS chave, "
+         f"SELECT regexp_replace(telefone1, '[^0-9]', '', 'g') AS chave, "
+         f"       regexp_replace(ddd1, '[^0-9]', '', 'g') AS ddd, "
          f"       cnpj_numerico, uf FROM {leitura} "
          f"WHERE telefone1 IS NOT NULL AND trim(telefone1) <> '' "
          f"UNION ALL "
-         f"SELECT regexp_replace(ddd2 || telefone2, '[^0-9]', '', 'g'), "
+         f"SELECT regexp_replace(telefone2, '[^0-9]', '', 'g'), "
+         f"       regexp_replace(ddd2, '[^0-9]', '', 'g'), "
          f"       cnpj_numerico, uf FROM {leitura} "
          f"WHERE telefone2 IS NOT NULL AND trim(telefone2) <> ''"),
     ]
