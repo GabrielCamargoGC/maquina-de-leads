@@ -281,21 +281,30 @@ def gerar_indice_consulta(con, entrada, destino):
     # nada -- de fora era indistinguivel de travado. Tres ordenacoes menores
     # terminam antes, cada uma reporta ao acabar, e a consulta so abre o
     # arquivo do tipo que interessa.
+    # A UF entra junto com o CNPJ de proposito. A base e particionada por
+    # (balde, uf); sabendo os dois, a busca dos dados completos abre so as
+    # pastas certas. Sem a UF, 26 resultados espalhados obrigavam a abrir
+    # quase todas as 280 particoes e a consulta levava 21 segundos depois de
+    # o indice ja ter respondido em milissegundos.
     partes = [
         ("R", "razao social",
-         f"SELECT upper(strip_accents(razao_social)) AS chave, cnpj_numerico "
+         f"SELECT upper(strip_accents(razao_social)) AS chave, cnpj_numerico, uf "
          f"FROM {leitura} WHERE razao_social IS NOT NULL AND razao_social <> ''"),
         ("F", "nome fantasia",
-         f"SELECT upper(strip_accents(nome_fantasia)) AS chave, cnpj_numerico "
+         f"SELECT upper(strip_accents(nome_fantasia)) AS chave, cnpj_numerico, uf "
          f"FROM {leitura} WHERE nome_fantasia IS NOT NULL AND nome_fantasia <> ''"),
-        # telefone entra com DDD colado e so digitos, que e como a tela
-        # normaliza o que a pessoa digita
+        # So digitos: o campo da Receita as vezes vem com espaco ou tracinho,
+        # e a chave precisa ficar igual ao que a tela produz a partir do que a
+        # pessoa digitou. Colar ddd e telefone crus fazia um numero existente
+        # nao ser encontrado.
         ("T", "telefone",
-         f"SELECT ddd1 || telefone1 AS chave, cnpj_numerico FROM {leitura} "
-         f"WHERE telefone1 IS NOT NULL AND telefone1 <> '' "
+         f"SELECT regexp_replace(ddd1 || telefone1, '[^0-9]', '', 'g') AS chave, "
+         f"       cnpj_numerico, uf FROM {leitura} "
+         f"WHERE telefone1 IS NOT NULL AND trim(telefone1) <> '' "
          f"UNION ALL "
-         f"SELECT ddd2 || telefone2, cnpj_numerico FROM {leitura} "
-         f"WHERE telefone2 IS NOT NULL AND telefone2 <> ''"),
+         f"SELECT regexp_replace(ddd2 || telefone2, '[^0-9]', '', 'g'), "
+         f"       cnpj_numerico, uf FROM {leitura} "
+         f"WHERE telefone2 IS NOT NULL AND trim(telefone2) <> ''"),
     ]
 
     # Monta num nome provisorio e so renomeia no fim. Interrupcao no meio

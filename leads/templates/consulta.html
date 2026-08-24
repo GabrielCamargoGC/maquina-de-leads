@@ -40,7 +40,22 @@
             · {{ '%.2f'|format(segundos) }}s
           </div>
         </div>
+        {% if tipo == 'nome' and not amplo %}
+          <a class="botao secundario"
+             href="{{ url_for('tela_consulta', termo=termo, amplo=1) }}">
+            Procurar no meio do nome
+          </a>
+        {% endif %}
       </div>
+      {% if tipo == 'nome' and not amplo %}
+        <p class="dica">
+          Esta busca pega nomes que <strong>comecam</strong> com
+          "{{ termo }}". O botao ao lado procura o termo em qualquer parte do
+          nome — acha mais, e demora alguns segundos.
+        </p>
+      {% elif amplo %}
+        <p class="dica">Procurado em qualquer parte do nome.</p>
+      {% endif %}
     </div>
 
     {% if linhas %}

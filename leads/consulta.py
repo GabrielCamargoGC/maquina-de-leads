@@ -102,11 +102,14 @@ COLUNAS = busca.COLUNAS_TELA + [
 ]
 
 
-def _por_cnpjs(cnpjs, dir_dados=None, limite=LIMITE_PADRAO):
+def _por_cnpjs(cnpjs, dir_dados=None, limite=LIMITE_PADRAO, ufs=None):
     """Traz as linhas completas a partir de uma lista de CNPJ.
 
-    Rapido de proposito: o balde da particao sai do proprio CNPJ, entao o
-    DuckDB abre so as pastas que podem conter aqueles numeros.
+    ufs importa muito. A base e particionada por (balde, uf): o balde sai do
+    proprio CNPJ, mas sem a UF o DuckDB precisa abrir a pasta de TODOS os
+    estados de cada balde. Com 26 resultados espalhados isso vira quase as
+    280 particoes, e a consulta levava 21 segundos depois de o indice ja ter
+    respondido em milissegundos. Por isso o indice guarda a UF junto.
     """
     if not cnpjs:
         return []
@@ -116,10 +119,13 @@ def _por_cnpjs(cnpjs, dir_dados=None, limite=LIMITE_PADRAO):
     cond_balde = ""
     if baldes:
         cond_balde = " AND balde IN (" + ",".join("?" for _ in baldes) + ")"
+    ufs = sorted({u for u in (ufs or []) if u})
+    if ufs:
+        cond_balde += " AND uf IN (" + ",".join("?" for _ in ufs) + ")"
     sql = (f"SELECT {', '.join(COLUNAS)} FROM {_leitura(dir_dados)} "
            f"WHERE cnpj_numerico IN ({marcas}){cond_balde} "
            f"ORDER BY matriz_filial, cnpj_numerico LIMIT {int(limite)}")
-    rel = cur.execute(sql, list(cnpjs) + baldes)
+    rel = cur.execute(sql, list(cnpjs) + baldes + ufs)
     nomes = [d[0] for d in rel.description]
     return [dict(zip(nomes, l)) for l in rel.fetchall()]
 
@@ -147,24 +153,27 @@ def _chaves(valor, tipo_indice, prefixo=False, limite=LIMITE_PADRAO,
         # minimo e o maximo de cada bloco e pula o que nao pode conter a
         # chave. Um LIKE 'X%' obrigaria a ler tudo.
         fim = valor[:-1] + chr(ord(valor[-1]) + 1) if valor else valor
-        sql = (f"SELECT DISTINCT cnpj_numerico FROM read_parquet('{caminho}') "
+        sql = (f"SELECT DISTINCT cnpj_numerico, uf FROM read_parquet('{caminho}') "
                f"WHERE chave >= ? AND chave < ? LIMIT {int(limite)}")
         params = [valor, fim]
     else:
-        sql = (f"SELECT DISTINCT cnpj_numerico FROM read_parquet('{caminho}') "
+        sql = (f"SELECT DISTINCT cnpj_numerico, uf FROM read_parquet('{caminho}') "
                f"WHERE chave = ? LIMIT {int(limite)}")
         params = [valor]
     try:
-        return [r[0] for r in cur.execute(sql, params).fetchall()]
+        return [(r[0], r[1]) for r in cur.execute(sql, params).fetchall()]
     except Exception:
         return None
 
 
-def procurar(termo, limite=LIMITE_PADRAO, dir_dados=None):
+def procurar(termo, limite=LIMITE_PADRAO, dir_dados=None, amplo=False):
     """Devolve (linhas, tipo, aviso).
 
-    aviso e texto para a tela quando algo precisa ser explicado -- consulta
-    lenta, resultado cortado, indice ausente.
+    amplo=True procura o termo em QUALQUER parte do nome, e nao so no
+    comeco. E o modo lento: nao existe ordenacao que ajude a achar trecho no
+    meio de uma palavra, entao a coluna de nome da base inteira e lida. Fica
+    como opcao na tela em vez de padrao -- quem procura "izabela" quase
+    sempre quer os nomes que comecam assim, e esses saem em milissegundos.
     """
     tipo, valor = detectar(termo)
     if not tipo:
@@ -189,7 +198,8 @@ def procurar(termo, limite=LIMITE_PADRAO, dir_dados=None):
     if tipo == TELEFONE:
         achados = _chaves(valor, "T", limite=limite, dir_dados=dir_dados)
         if achados is not None:
-            return _por_cnpjs(achados, dir_dados, limite), tipo, None
+            return (_por_cnpjs([c for c, _ in achados], dir_dados, limite,
+                               ufs=[u for _, u in achados]), tipo, None)
         sql = (f"SELECT {', '.join(COLUNAS)} FROM {_leitura(dir_dados)} "
                f"WHERE (ddd1 || telefone1) = ? OR (ddd2 || telefone2) = ? "
                f"LIMIT {int(limite)}")
@@ -199,23 +209,43 @@ def procurar(termo, limite=LIMITE_PADRAO, dir_dados=None):
                 "Sem indice nesta base: a consulta por telefone varreu tudo.")
 
     # --- nome ---
-    exatos = _chaves(valor, "R", limite=limite, dir_dados=dir_dados)
-    fantasia = _chaves(valor, "F", limite=limite, dir_dados=dir_dados)
-    if exatos is not None or fantasia is not None:
-        cnpjs = list(exatos or [])
-        cnpjs += [c for c in (fantasia or []) if c not in cnpjs]
-        if not cnpjs:
-            pr = _chaves(valor, "R", prefixo=True, limite=limite, dir_dados=dir_dados)
-            pf = _chaves(valor, "F", prefixo=True, limite=limite, dir_dados=dir_dados)
-            cnpjs = list(pr or [])
-            cnpjs += [c for c in (pf or []) if c not in cnpjs]
-        if cnpjs:
-            return _por_cnpjs(cnpjs, dir_dados, limite), tipo, None
-        aviso = ("Nenhum nome comeca assim. Procurei o trecho no meio do nome "
-                 "tambem, o que demora mais.")
+    # Sempre por PREFIXO, nunca so exato. A busca exata era redundante --
+    # "IZABELA" ja esta dentro do intervalo "IZABELA*" -- e, por rodar antes e
+    # curto-circuitar quando achava algo, escondia todo nome que apenas
+    # COMECA com o termo: procurar "izabela" achava as 26 empresas cujo
+    # fantasia era exatamente "IZABELA" e nenhuma "IZABELA MODAS LTDA".
+    if amplo:
+        aviso = None
+    else:
+        por_razao = _chaves(valor, "R", prefixo=True, limite=limite, dir_dados=dir_dados)
+        por_fantasia = _chaves(valor, "F", prefixo=True, limite=limite,
+                               dir_dados=dir_dados)
+        return _nome_pelo_indice(por_razao, por_fantasia, valor, tipo,
+                                 dir_dados, limite, cur)
 
-    # trecho no meio: nao ha ordenacao que ajude, entao le a coluna de nome
-    # da base principal -- que para este caso e menor que o proprio indice
+    return _nome_varrendo(valor, tipo, dir_dados, limite, cur, None)
+
+
+def _nome_pelo_indice(por_razao, por_fantasia, valor, tipo, dir_dados, limite, cur):
+    aviso = None
+    if por_razao is not None or por_fantasia is not None:
+        vistos, pares = set(), []
+        for c, u in list(por_razao or []) + list(por_fantasia or []):
+            if c not in vistos:
+                vistos.add(c)
+                pares.append((c, u))
+        if pares:
+            return (_por_cnpjs([c for c, _ in pares], dir_dados, limite,
+                               ufs=[u for _, u in pares]), tipo, None)
+        aviso = ("Nenhum nome comeca assim. Procurei tambem no meio do nome, "
+                 "o que demora mais.")
+
+    return _nome_varrendo(valor, tipo, dir_dados, limite, cur, aviso)
+
+
+def _nome_varrendo(valor, tipo, dir_dados, limite, cur, aviso):
+    """Trecho em qualquer parte do nome. Le a coluna de nome da base toda --
+    nao ha ordenacao que ajude a achar no meio de uma palavra."""
     sql = (f"SELECT {', '.join(COLUNAS)} FROM {_leitura(dir_dados)} "
            f"WHERE upper(strip_accents(razao_social)) LIKE ? "
            f"   OR upper(strip_accents(nome_fantasia)) LIKE ? "

@@ -199,13 +199,14 @@ def tela_busca():
 @app.route("/consulta")
 def tela_consulta():
     termo = (request.args.get("termo") or "").strip()
+    amplo = request.args.get("amplo") in ("1", "on", "true")
     ctx = dict(_comum("consulta"), termo=termo, total=None, linhas=[],
-               tipo=None, descricao=None, aviso=None, segundos=0.0)
+               tipo=None, descricao=None, aviso=None, segundos=0.0, amplo=amplo)
 
     if termo and ctx["base_pronta"]:
         t0 = time.time()
         try:
-            linhas, tipo, aviso = consulta.procurar(termo)
+            linhas, tipo, aviso = consulta.procurar(termo, amplo=amplo)
             ctx.update(linhas=linhas, total=len(linhas), tipo=tipo,
                        descricao=consulta.DESCRICAO.get(tipo), aviso=aviso,
                        segundos=time.time() - t0)
