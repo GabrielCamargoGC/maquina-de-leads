@@ -120,6 +120,53 @@
     });
   })();
 
+  // Copiar CNPJ, telefone e e-mail com um clique.
+  //
+  // Um so ouvinte no documento, e nao um por botao: a tabela chega a
+  // centenas de linhas e cada uma tem tres botoes.
+  //
+  // O valor sai do atributo, nao do texto da tela: o que se copia deve ser o
+  // dado limpo ("18997413539"), nao a versao formatada ("(18) 99741353"),
+  // para colar direto em discador, planilha ou WhatsApp.
+  (function () {
+    document.addEventListener("click", function (ev) {
+      var b = ev.target.closest ? ev.target.closest("[data-copiar]") : null;
+      if (!b) return;
+      var valor = b.getAttribute("data-copiar");
+      if (!valor) return;
+
+      function feito() {
+        var antes = b.innerHTML;
+        b.innerHTML = "✓";
+        b.dataset.feito = "1";
+        setTimeout(function () {
+          b.innerHTML = antes;
+          delete b.dataset.feito;
+        }, 1200);
+      }
+
+      // O navegador so libera a area de transferencia em contexto seguro.
+      // Fora dele (http puro) o caminho abaixo copia por um campo temporario.
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(valor).then(feito, antigo);
+      } else {
+        antigo();
+      }
+
+      function antigo() {
+        var t = document.createElement("textarea");
+        t.value = valor;
+        t.setAttribute("readonly", "");
+        t.style.position = "fixed";
+        t.style.opacity = "0";
+        document.body.appendChild(t);
+        t.select();
+        try { document.execCommand("copy"); feito(); } catch (e) { /* desiste */ }
+        document.body.removeChild(t);
+      }
+    });
+  })();
+
   // Alterna claro/escuro e guarda a escolha. Sem escolha salva, a pagina
   // segue o tema do sistema -- por isso o botao le o estado efetivo, e nao
   // so o atributo.

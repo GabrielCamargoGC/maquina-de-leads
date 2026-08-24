@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_filtros.html" as ff %}
 {% block titulo %}Consulta — Maquina de Leads{% endblock %}
 {% block cabecalho %}Consulta{% endblock %}
 {% block subtitulo %}Ache uma empresa por CNPJ, telefone ou nome.{% endblock %}
@@ -74,7 +75,7 @@
                   {% if l.nome_fantasia %}<div class="fantasia">{{ l.nome_fantasia }}</div>{% endif %}
                   <div class="cnae-badge">{{ l.matriz_filial_desc }}</div>
                 </td>
-                <td class="num">{{ l.cnpj }}</td>
+                <td class="num">{{ l.cnpj }}{{ ff.botao_copiar(l.cnpj) }}</td>
                 <td>
                   <span class="pill {{ 'pill-sim' if l.situacao_desc == 'Ativa' else 'pill-nao' }}">
                     {{ l.situacao_desc }}
@@ -82,8 +83,13 @@
                 </td>
                 <td>{{ l.municipio }}/{{ l.uf }}</td>
                 <td>
-                  {% if l.telefone_fmt %}<div>{{ l.telefone_fmt }}</div>{% endif %}
-                  {% if l.email %}<a class="contato" href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}
+                  {% if l.telefone_fmt %}
+                    <div>{{ l.telefone_fmt }}{{ ff.botao_copiar(l.ddd1 ~ l.telefone1) }}</div>
+                  {% endif %}
+                  {% if l.email %}
+                    <a class="contato" href="mailto:{{ l.email }}">{{ l.email }}</a>
+                    {{ ff.botao_copiar(l.email) }}
+                  {% endif %}
                   {% for m in l.motivos or [] %}
                     <span class="pill pill-espera" style="margin-top:4px">{{ m }}</span>
                   {% endfor %}

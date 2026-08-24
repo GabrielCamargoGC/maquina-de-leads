@@ -1,3 +1,14 @@
+{# Botao de copiar. O valor vai num atributo em vez de ser lido do texto
+   da tela: o que se copia deve ser o dado limpo -- "18997413539", nao
+   "(18) 99741353" com pontuacao -- para colar direto em discador,
+   planilha ou WhatsApp. #}
+{% macro botao_copiar(valor, rotulo="Copiar") %}
+  {%- if valor -%}
+  <button type="button" class="copiar-mini" data-copiar="{{ valor }}"
+          title="{{ rotulo }}" aria-label="{{ rotulo }}">&#128203;</button>
+  {%- endif -%}
+{% endmacro %}
+
 {#
   Formulario de filtros, compartilhado pela tela de busca e pela de empresas
   novas -- as duas filtram exatamente as mesmas coisas, so mudam o que fazem
@@ -99,7 +110,8 @@
         <td>
           <div class="razao">{{ l.razao_social or '(sem razao social)' }}</div>
           {% if l.nome_fantasia %}<div class="fantasia">{{ l.nome_fantasia }}</div>{% endif %}
-          <div class="fantasia">{{ l.cnpj }} &middot; {{ l.situacao_desc }}</div>
+          <div class="fantasia">{{ l.cnpj }}{{ botao_copiar(l.cnpj) }}
+            &middot; {{ l.situacao_desc }}</div>
         </td>
         <td><span class="cnae-badge">{{ l.cnae_principal }}</span><br>{{ l.cnae_descricao or '' }}</td>
         <td><span class="fantasia">{{ l.porte_desc or '—' }}</span></td>
@@ -109,9 +121,13 @@
             {{ 'Sim' if l.optante_mei else 'Nao' }}</span></td>
         <td>
           {% if l.telefone_fmt %}
-            <a class="contato" href="tel:{{ l.ddd1 }}{{ l.telefone1 }}">{{ l.telefone_fmt }}</a><br>
+            <a class="contato" href="tel:{{ l.ddd1 }}{{ l.telefone1 }}">{{ l.telefone_fmt }}</a>
+            {{ botao_copiar(l.ddd1 ~ l.telefone1) }}<br>
           {% endif %}
-          {% if l.email %}<a class="contato" href="mailto:{{ l.email }}">{{ l.email }}</a>{% endif %}
+          {% if l.email %}
+            <a class="contato" href="mailto:{{ l.email }}">{{ l.email }}</a>
+            {{ botao_copiar(l.email) }}
+          {% endif %}
           {% if not l.telefone_fmt and not l.email %}<span class="fantasia">—</span>{% endif %}
         </td>
         <td>

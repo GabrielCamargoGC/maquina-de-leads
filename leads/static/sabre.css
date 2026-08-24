@@ -686,3 +686,38 @@ code.destaque {
 
 .barra.dupla { display: flex; }
 .barra.dupla > span { flex: 0 0 auto; }
+
+
+/* ---------------- botao de copiar ao lado do dado ---------------- */
+
+/* Some ate o mouse chegar na linha. Um icone fixo em cada CNPJ, telefone e
+   e-mail encheria a tabela de ruido -- e a tabela ja tem oito colunas. */
+.copiar-mini {
+  border: none;
+  background: transparent;
+  color: var(--texto-3);
+  cursor: pointer;
+  padding: 2px 4px;
+  margin-left: 4px;
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1;
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity .14s ease, color .14s ease, background .14s ease;
+}
+tr:hover .copiar-mini,
+.copiar-mini:focus-visible { opacity: 1; }
+.copiar-mini:hover { color: var(--sabre-texto); background: var(--sabre-fundo); }
+.copiar-mini[data-feito="1"] { opacity: 1; color: var(--ok-texto); }
+
+/* Em tela de toque nao existe passar o mouse: o botao fica sempre visivel,
+   senao seria impossivel de alcancar. */
+@media (hover: none) {
+  .copiar-mini { opacity: .55; }
+}
+
+/* Fora de tabela (tela de detalhe) nao ha linha para destacar. */
+td .copiar-mini { }
+.dado-copiavel .copiar-mini { opacity: .55; }
+.dado-copiavel:hover .copiar-mini { opacity: 1; }
