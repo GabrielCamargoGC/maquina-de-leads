@@ -25,6 +25,8 @@ de tentar juntar as pontas sozinho num servidor sem ninguem olhando.
 import os
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -136,33 +138,28 @@ def instalar_dependencias():
 
 
 def reiniciar_servico():
-    """Reinicia o site DEPOIS que esta resposta ja tiver saido.
+    """Reinicia o site encerrando o proprio processo.
 
-    O site e o proprio servico. Mandar reiniciar aqui dentro mataria o
-    processo no meio da requisicao e o navegador mostraria erro de conexao
-    justamente quando deu certo. Por isso a ordem sai para um processo
-    solto, que espera alguns segundos antes de agir.
+    Quem sobe de novo e o NSSM, que registra o servico com
+    "AppExit Default Restart": se o processo termina, ele reabre em segundos.
+
+    A primeira versao disparava um processo filho para rodar "net stop" e
+    "net start". Nao funcionava, e o modo de falhar era traicoeiro: o NSSM
+    mata a arvore de processos do servico ao para-lo, entao o filho morria
+    entre o stop e o start. A tela dizia "reinicio agendado", o site
+    continuava no ar -- e continuava com o codigo velho carregado na
+    memoria, sem nenhum sinal de que nada tinha acontecido.
+
+    Encerrar o proprio processo nao tem esse problema: nao depende de
+    ninguem sobreviver ao desligamento.
     """
-    if os.name == "nt":
-        comando = (
-            f'ping -n 4 127.0.0.1 > nul & '
-            f'net stop "{NOME_SERVICO}" & '
-            f'net start "{NOME_SERVICO}"'
-        )
-        criar = getattr(subprocess, "DETACHED_PROCESS", 0) | \
-            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        try:
-            subprocess.Popen(["cmd", "/c", comando], creationflags=criar,
-                             close_fds=True)
-            return True, "Reinicio agendado. O site volta em alguns segundos."
-        except OSError as e:
-            return False, f"Nao consegui agendar o reinicio: {e}"
+    def sair():
+        time.sleep(3)  # tempo de a resposta chegar ao navegador
+        # os._exit e nao sys.exit: sys.exit levanta excecao, que o waitress
+        # captura e trata como erro de uma requisicao -- o processo continua
+        # vivo com o codigo velho na memoria. Aqui o objetivo e justamente
+        # encerrar o processo.
+        os._exit(0)
 
-    try:
-        subprocess.Popen(
-            ["sh", "-c", f"sleep 3; systemctl restart {NOME_SERVICO}"],
-            start_new_session=True, close_fds=True,
-        )
-        return True, "Reinicio agendado. O site volta em alguns segundos."
-    except OSError as e:
-        return False, f"Nao consegui agendar o reinicio: {e}"
+    threading.Thread(target=sair, daemon=True).start()
+    return True, ("Reinicio em andamento. O site volta em alguns segundos.")
