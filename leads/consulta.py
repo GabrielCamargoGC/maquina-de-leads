@@ -79,6 +79,36 @@ def detectar(termo):
     return NOME, normalizar(termo)
 
 
+def variantes_telefone(digitos):
+    """Formas sob as quais um telefone pode estar guardado na base.
+
+    O campo TELEFONE da Receita tem 8 caracteres. Foi definido antes de o
+    celular ganhar o nono digito e nunca foi ampliado, entao TODO celular na
+    base do CNPJ chega com o ultimo digito cortado: 18 997413539 esta gravado
+    como 18 99741353.
+
+    Conferido no arquivo bruto da Receita, nao deduzido -- e o dado que vem de
+    la, nao perda nossa. O digito cortado nao da para recuperar (telefone nao
+    tem digito verificador), mas da para PROCURAR pelas duas formas, que e o
+    que importa para quem tem o numero completo em maos.
+    """
+    d = so_digitos(digitos)
+    formas = [d]
+    if len(d) == 11:
+        formas.append(d[:10])   # como a Receita guardou: DDD + 8 digitos
+    elif len(d) == 10 and d[2:3] == "9":
+        # ja veio truncado; tentar completar seria chutar o ultimo digito
+        pass
+    return formas
+
+
+def telefone_truncado(ddd, numero):
+    """Celular guardado com 8 digitos -- falta o ultimo, e a tela precisa
+    dizer isso em vez de mostrar um numero que nao completa a ligacao."""
+    n = so_digitos(numero)
+    return len(n) == 8 and n.startswith("9")
+
+
 def _leitura(dir_dados=None):
     d = config.DIR_ATUAL if dir_dados is None else dir_dados
     return busca.leitura((d / "empresas_final" / "**" / "*.parquet").as_posix())
@@ -196,14 +226,31 @@ def procurar(termo, limite=LIMITE_PADRAO, dir_dados=None, amplo=False):
         return [dict(zip(nomes, l)) for l in rel.fetchall()], tipo, None
 
     if tipo == TELEFONE:
-        achados = _chaves(valor, "T", limite=limite, dir_dados=dir_dados)
+        formas = variantes_telefone(valor)
+        achados, usou_truncado = None, False
+        for i, forma in enumerate(formas):
+            r = _chaves(forma, "T", limite=limite, dir_dados=dir_dados)
+            if r is None:
+                achados = None
+                break
+            achados = r
+            if r:
+                usou_truncado = i > 0
+                break
         if achados is not None:
+            aviso = None
+            if usou_truncado:
+                aviso = ("A Receita guarda o telefone com 8 digitos, entao o "
+                         "ultimo digito do celular nao esta na base. Procurei "
+                         "pelo numero sem ele.")
             return (_por_cnpjs([c for c, _ in achados], dir_dados, limite,
-                               ufs=[u for _, u in achados]), tipo, None)
+                               ufs=[u for _, u in achados]), tipo, aviso)
+        marcas = ",".join("?" for _ in formas)
         sql = (f"SELECT {', '.join(COLUNAS)} FROM {_leitura(dir_dados)} "
-               f"WHERE (ddd1 || telefone1) = ? OR (ddd2 || telefone2) = ? "
+               f"WHERE (ddd1 || telefone1) IN ({marcas}) "
+               f"   OR (ddd2 || telefone2) IN ({marcas}) "
                f"LIMIT {int(limite)}")
-        rel = cur.execute(sql, [valor, valor])
+        rel = cur.execute(sql, formas + formas)
         nomes = [d[0] for d in rel.description]
         return ([dict(zip(nomes, l)) for l in rel.fetchall()], tipo,
                 "Sem indice nesta base: a consulta por telefone varreu tudo.")

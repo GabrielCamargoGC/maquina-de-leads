@@ -73,9 +73,23 @@
         <tr><td><strong>Municipio</strong></td><td>{{ e.municipio }}/{{ e.uf }}</td></tr>
         <tr><td><strong>CEP</strong></td><td class="num">{{ e.cep or '—' }}</td></tr>
         <tr><td><strong>Telefone 1</strong></td>
-            <td class="num">{% if e.telefone1 %}({{ e.ddd1 }}) {{ e.telefone1 }}{% else %}—{% endif %}</td></tr>
+            <td class="num">
+              {% if e.telefone1 %}
+                ({{ e.ddd1 }}) {{ e.telefone1 }}
+                {% if e.telefone1|telefone_incompleto %}
+                  <span class="pill pill-espera" title="A Receita guarda o telefone com 8 digitos">falta 1 digito</span>
+                {% endif %}
+              {% else %}—{% endif %}
+            </td></tr>
         <tr><td><strong>Telefone 2</strong></td>
-            <td class="num">{% if e.telefone2 %}({{ e.ddd2 }}) {{ e.telefone2 }}{% else %}—{% endif %}</td></tr>
+            <td class="num">
+              {% if e.telefone2 %}
+                ({{ e.ddd2 }}) {{ e.telefone2 }}
+                {% if e.telefone2|telefone_incompleto %}
+                  <span class="pill pill-espera">falta 1 digito</span>
+                {% endif %}
+              {% else %}—{% endif %}
+            </td></tr>
         <tr><td><strong>E-mail</strong></td>
             <td>{% if e.email %}<a class="contato" href="mailto:{{ e.email }}">{{ e.email }}</a>{% else %}—{% endif %}</td></tr>
       </tbody></table>
@@ -109,6 +123,18 @@
       </table>
     </div>
   </div>
+  {% endif %}
+
+  {% if e.telefone1|telefone_incompleto or e.telefone2|telefone_incompleto %}
+    <div class="card">
+      <div class="alerta alerta-aviso">
+        O campo de telefone da Receita tem 8 caracteres e nunca foi ampliado
+        para o nono digito do celular. Todo celular na base do CNPJ chega sem
+        o ultimo digito, e nao ha como recupera-lo — telefone nao tem digito
+        verificador. Vale como indicio: o numero real e este com mais um
+        digito no fim.
+      </div>
+    </div>
   {% endif %}
 
   <div class="acoes">

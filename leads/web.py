@@ -47,6 +47,18 @@ def _data(d):
         return texto
 
 
+@app.template_filter("telefone_incompleto")
+def _telefone_incompleto(numero):
+    """True quando o celular esta na base com 8 digitos.
+
+    O campo TELEFONE da Receita tem 8 caracteres e nunca foi ampliado para o
+    nono digito do celular. Mostrar o numero sem avisar faria a pessoa
+    discar e nao completar, achando que o dado esta errado -- quando na
+    verdade esta incompleto na origem.
+    """
+    return consulta.telefone_truncado("", numero or "")
+
+
 @app.template_filter("milhar")
 def _milhar(n):
     """1234567 -> 1.234.567 (separador brasileiro)."""
