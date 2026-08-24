@@ -103,10 +103,20 @@ def variantes_telefone(digitos):
 
 
 def telefone_truncado(ddd, numero):
-    """Celular guardado com 8 digitos -- falta o ultimo, e a tela precisa
-    dizer isso em vez de mostrar um numero que nao completa a ligacao."""
+    """Celular de 8 digitos: provavelmente sem o ultimo digito.
+
+    Heuristica, e nao certeza. Ate 2012 celular TINHA 8 digitos, entao um
+    numero antigo pode estar completo assim mesmo. Nao ha no dado como
+    separar os dois casos, por isso a tela diz "pode faltar" em vez de
+    afirmar.
+
+    Medido na base de julho/2026, sobre 2 milhoes de telefones preenchidos:
+    nenhum passa de 8 caracteres (o campo da Receita nao comporta mais), 89%
+    tem exatamente 8, e destes 23% comecam com 9. Fixo, que comeca com 2 a 5,
+    cabe nos 8 e esta inteiro.
+    """
     n = so_digitos(numero)
-    return len(n) == 8 and n.startswith("9")
+    return len(n) == 8 and n[0] in "89"
 
 
 def _leitura(dir_dados=None):
