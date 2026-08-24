@@ -50,6 +50,15 @@ DUCKDB_THREADS_IMPORT = int(os.environ.get("LEADS_DUCKDB_THREADS_IMPORT", "3"))
 # Lote de leitura do CSV. 64 MB equilibra velocidade e RAM.
 BLOCO_CSV = 64 << 20
 
+# Cookie de sessao so viaja por HTTPS. Vale sempre em producao; local, sem
+# certificado, precisa ser desligado -- senao o navegador descarta o cookie e
+# o login nunca fecha.
+#
+# Configuracao explicita, e nao "not app.debug", porque a protecao e ligada
+# na importacao do modulo, antes de o modo de depuracao existir: a deducao
+# automatica dava sempre "producao" e quebrava o desenvolvimento.
+COOKIE_SEGURO = os.environ.get("LEADS_COOKIE_SEGURO", "1") not in ("0", "nao", "false")
+
 WEB_PORTA = int(os.environ.get("LEADS_PORTA", "8080"))
 WEB_THREADS = int(os.environ.get("LEADS_WEB_THREADS", "8"))
 MAX_LINHAS_TELA = 300

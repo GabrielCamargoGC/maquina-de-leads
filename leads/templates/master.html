@@ -125,6 +125,52 @@
   </p>
 </div>
 
+{# ---------------- indice de consulta ---------------- #}
+
+<div class="card">
+  <h2>Indice de consulta</h2>
+  <p class="dica" style="margin-bottom:14px">
+    E o que faz a aba Consulta achar por nome e telefone em milissegundos em
+    vez de varrer 72 milhoes de linhas. Refeito sozinho a cada atualizacao da
+    base; refaca aqui se a estrutura dele mudou.
+  </p>
+
+  <div data-tarefa
+       data-rodando="{{ '1' if tarefa.rodando else '0' }}"
+       data-url="{{ url_for('acesso.master_tarefa') }}">
+    <div class="barra" style="margin-bottom:8px">
+      <span data-tarefa-barra style="width: {{ tarefa.pct }}%"></span>
+    </div>
+    <p class="dica" data-tarefa-texto>
+      {% if tarefa.rodando %}
+        Etapa {{ tarefa.etapa + 1 }} de {{ tarefa.total_etapas }} —
+        {{ tarefa.rotulo }} ({{ tarefa.segundos }}s)
+      {% elif tarefa.erro %}
+        Falhou: {{ tarefa.erro }}
+      {% elif tarefa.resultado %}
+        Concluido: {{ tarefa.resultado }} em {{ tarefa.segundos }}s
+      {% else %}
+        Nenhuma tarefa em andamento.
+      {% endif %}
+    </p>
+  </div>
+
+  <form method="post" action="{{ url_for('acesso.master_indice') }}"
+        class="acoes" data-espera="Iniciando. Pode fechar a pagina; continua rodando.">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="botao secundario" type="submit" data-tarefa-botao
+            {{ 'disabled' if tarefa.rodando }}>
+      Refazer indice agora
+    </button>
+  </form>
+
+  <div class="alerta alerta-aviso">
+    Leva dezenas de minutos e usa a maquina. Prefira fora do expediente —
+    durante a geracao as buscas ficam lentas. Pode fechar esta pagina: a
+    tarefa continua, e o progresso reaparece quando voltar.
+  </div>
+</div>
+
 {# ---------------- saude ---------------- #}
 
 <div class="card">
@@ -320,4 +366,55 @@
   </div>
 </div>
 
+<script>
+  // Barra do indice: pergunta o estado de tempos em tempos.
+  //
+  // A tarefa roda no servidor, nao no navegador -- por isso a pagina pode ser
+  // fechada sem interromper nada, e por isso o progresso reaparece certo ao
+  // voltar. O intervalo e de 3s: a tarefa leva dezenas de minutos, perguntar
+  // mais vezes so gastaria requisicao.
+  (function () {
+    var raiz = document.querySelector("[data-tarefa]");
+    if (!raiz) return;
+    var barra = raiz.querySelector("[data-tarefa-barra]");
+    var texto = raiz.querySelector("[data-tarefa-texto]");
+    var botao = document.querySelector("[data-tarefa-botao]");
+    var url = raiz.getAttribute("data-url");
+    var timer = null;
+
+    function pintar(e) {
+      barra.style.width = (e.pct || 0) + "%";
+      if (e.rodando) {
+        texto.textContent = "Etapa " + (e.etapa + 1) + " de " + e.total_etapas +
+                            " — " + e.rotulo + " (" + e.segundos + "s)";
+        if (botao) botao.disabled = true;
+      } else {
+        if (botao) botao.disabled = false;
+        if (e.erro) {
+          texto.textContent = "Falhou: " + e.erro;
+        } else if (e.resultado) {
+          texto.textContent = "Concluido: " + e.resultado + " em " + e.segundos + "s";
+          barra.style.width = "100%";
+        } else {
+          texto.textContent = "Nenhuma tarefa em andamento.";
+        }
+        if (timer) { clearInterval(timer); timer = null; }
+      }
+    }
+
+    function perguntar() {
+      fetch(url, { headers: { "Accept": "application/json" } })
+        .then(function (r) { return r.json(); })
+        .then(pintar)
+        .catch(function () { /* rede oscilou; tenta de novo no proximo ciclo */ });
+    }
+
+    if (raiz.getAttribute("data-rodando") === "1") {
+      timer = setInterval(perguntar, 3000);
+      perguntar();
+    }
+  })();
+</script>
+
 {% endblock %}
+

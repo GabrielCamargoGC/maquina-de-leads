@@ -19,8 +19,8 @@ from flask import (Blueprint, abort, redirect, render_template, request,
                    session, url_for)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import (atualizar_codigo, auditoria, busca, config, contas,
-               estado, saude)
+from . import (atualizar_codigo, auditoria, busca, config, consolidar,
+               contas, estado, saude, tarefas)
 
 bp = Blueprint("acesso", __name__)
 
@@ -152,7 +152,7 @@ def instalar(app):
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,   # JavaScript nao le o cookie
         SESSION_COOKIE_SAMESITE="Lax",  # nao viaja em POST de outro site
-        SESSION_COOKIE_SECURE=not app.debug,  # so por HTTPS em producao
+        SESSION_COOKIE_SECURE=config.COOKIE_SEGURO,  # so por HTTPS
         PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * contas.DIAS_SESSAO,
     )
     contas.criar_tabelas()
@@ -370,6 +370,7 @@ def master():
         pagina="master",
         maquina=saude.coletar(),
         codigo_situacao=atualizar_codigo.situacao(),
+        tarefa=tarefas.estado(),
         usuarios=contas.listar_usuarios(),
         eventos=auditoria.listar(limite=60),
         resumo=auditoria.resumo(horas=24),
@@ -415,6 +416,47 @@ def master_codigo():
         return redirect(url_for("acesso.master"))
 
     return redirect(url_for("acesso.master"))
+
+
+@bp.route("/master/indice", methods=["POST"])
+@exigir_master
+def master_indice():
+    """Refaz o indice de consulta sem ninguem tocar na maquina.
+
+    Roda em segundo plano porque leva dezenas de minutos: dentro da
+    requisicao, o navegador e o tunel desistiriam muito antes.
+    """
+    conferir_csrf()
+    eu = usuario_atual()
+
+    def trabalho(progresso):
+        entrada = config.DIR_ATUAL
+        con = consolidar.conectar_manutencao(entrada)
+        try:
+            total = consolidar.gerar_indice_consulta(
+                con, entrada, entrada / "empresas_final", progresso=progresso
+            )
+        finally:
+            con.close()
+        # sem isto a consulta continuaria enxergando o indice antigo: o
+        # DuckDB guarda metadados dos arquivos que ja abriu
+        busca.reiniciar_conexao()
+        return f"{total:,} chaves".replace(",", ".")
+
+    ok, msg = tarefas.iniciar("Refazer indice de consulta", trabalho,
+                              total_etapas=3)
+    if ok:
+        auditoria.registrar(auditoria.INDICE_REFEITO, usuario=eu["usuario"],
+                            ip=_ip())
+    session["aviso_master"] = msg
+    return redirect(url_for("acesso.master"))
+
+
+@bp.route("/master/tarefa")
+@exigir_master
+def master_tarefa():
+    """Estado da tarefa, para a barra na tela se atualizar sozinha."""
+    return tarefas.estado()
 
 
 @bp.route("/master/acao", methods=["POST"])

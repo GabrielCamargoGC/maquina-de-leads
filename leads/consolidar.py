@@ -252,7 +252,7 @@ def conectar_manutencao(entrada):
     return conectar(temp_dir=entrada / "_tmp", memoria="2GB", threads=2)
 
 
-def gerar_indice_consulta(con, entrada, destino):
+def gerar_indice_consulta(con, entrada, destino, progresso=None):
     """indice.parquet: chave -> CNPJ, para a tela de Consulta.
 
     Uma linha por razao social, nome fantasia e telefone. A chave vai
@@ -314,7 +314,9 @@ def gerar_indice_consulta(con, entrada, destino):
     provisorio.mkdir(parents=True)
 
     total = 0
-    for tipo, rotulo, sql in partes:
+    for i, (tipo, rotulo, sql) in enumerate(partes):
+        if progresso:
+            progresso(i, rotulo, len(partes))
         t0 = time.time()
         pasta = provisorio / f"tipo={tipo}"
         pasta.mkdir()
@@ -330,6 +332,8 @@ def gerar_indice_consulta(con, entrada, destino):
 
     shutil.rmtree(alvo, ignore_errors=True)
     provisorio.rename(alvo)
+    if progresso:
+        progresso(len(partes), "concluido", len(partes))
     _log(f"  indice de consulta: {total:,} chaves ({_fmt(_tamanho(alvo))})")
     return total
 

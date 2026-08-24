@@ -37,6 +37,7 @@ CODIGO_USADO = "codigo_recuperacao_usado"
 CODIGOS_REFEITOS = "codigos_refeitos"
 EXPORTOU = "exportou"
 CODIGO_ATUALIZADO = "codigo_atualizado"
+INDICE_REFEITO = "indice_refeito"
 
 ROTULOS = {
     LOGIN_OK: "Entrou",
@@ -52,6 +53,7 @@ ROTULOS = {
     CODIGOS_REFEITOS: "Codigos de recuperacao refeitos",
     EXPORTOU: "Exportou planilha",
     CODIGO_ATUALIZADO: "Codigo atualizado",
+    INDICE_REFEITO: "Indice de consulta refeito",
 }
 
 # Eventos que merecem destaque na tela do master.

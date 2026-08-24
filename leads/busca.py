@@ -49,6 +49,23 @@ def conexao(dir_dados=None):
         return _con
 
 
+def reiniciar_conexao():
+    """Fecha a conexao para a proxima consulta abrir uma nova.
+
+    Necessario depois de refazer o indice: o DuckDB guarda metadados dos
+    arquivos que ja leu, e continuaria enxergando o indice antigo mesmo com o
+    novo no lugar.
+    """
+    global _con, _dir_carregado
+    with _lock:
+        if _con is not None:
+            try:
+                _con.close()
+            except Exception:
+                pass
+        _con, _dir_carregado = None, None
+
+
 def leitura(caminho):
     """Trecho FROM que le o parquet consolidado.
 
