@@ -77,7 +77,7 @@
               {% if e.telefone1 %}
                 ({{ e.ddd1 }}) {{ e.telefone1 }}
                 {% if e.telefone1|telefone_incompleto %}
-                  <span class="pill pill-espera" title="O campo da Receita tem 8 caracteres">pode faltar 1 digito</span>
+                  <span class="pill pill-espera" title="Celular em formato anterior a 2012">formato antigo</span>
                 {% endif %}
               {% else %}—{% endif %}
             </td></tr>
@@ -86,7 +86,7 @@
               {% if e.telefone2 %}
                 ({{ e.ddd2 }}) {{ e.telefone2 }}
                 {% if e.telefone2|telefone_incompleto %}
-                  <span class="pill pill-espera">pode faltar 1 digito</span>
+                  <span class="pill pill-espera">formato antigo</span>
                 {% endif %}
               {% else %}—{% endif %}
             </td></tr>
@@ -128,15 +128,16 @@
   {% if e.telefone1|telefone_incompleto or e.telefone2|telefone_incompleto %}
     <div class="card">
       <div class="alerta alerta-aviso">
-        O campo de telefone da Receita tem 8 caracteres e nunca foi ampliado
-        para o nono digito do celular — medido na base, nenhum telefone passa
-        de 8. Celular cadastrado depois de 2012 chega aqui sem o ultimo
-        digito, e nao ha como recupera-lo: telefone nao tem digito
-        verificador.
+        Este celular esta em formato anterior a 2012, quando celular tinha 8
+        digitos. Como esta, provavelmente nao completa ligacao: hoje falta o
+        <strong>9</strong> na frente.
         <br><br>
-        Nao da para ter certeza caso a caso: ate 2012 celular tinha 8 digitos
-        mesmo, entao um numero antigo pode estar completo. Telefone fixo
-        (comeca com 2 a 5) cabe nos 8 e esta sempre inteiro.
+        O campo da Receita comporta 8 caracteres — medido na base, nenhum
+        telefone passa disso. E o cadastro so muda quando a empresa pede,
+        entao o DDD tambem pode estar desatualizado. Vale como indicio de
+        contato, nao como numero para discar.
+        <br><br>
+        Telefone fixo (comeca com 2 a 5) cabe nos 8 digitos e esta inteiro.
       </div>
     </div>
   {% endif %}

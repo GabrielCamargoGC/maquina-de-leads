@@ -102,21 +102,30 @@ def variantes_telefone(digitos):
     return formas
 
 
-def telefone_truncado(ddd, numero):
-    """Celular de 8 digitos: provavelmente sem o ultimo digito.
+def celular_antigo(ddd, numero):
+    """Numero de 8 digitos comecando com 8 ou 9: celular em formato
+    pre-2012, que hoje nao completa ligacao como esta.
 
-    Heuristica, e nao certeza. Ate 2012 celular TINHA 8 digitos, entao um
-    numero antigo pode estar completo assim mesmo. Nao ha no dado como
-    separar os dois casos, por isso a tela diz "pode faltar" em vez de
-    afirmar.
+    O QUE E MEDIDO, na base de julho/2026 sobre 2 milhoes de telefones
+    preenchidos: nenhum passa de 8 caracteres, 89% tem exatamente 8, e
+    destes 23% comecam com 9. O campo TELEFONE da Receita nao comporta os 9
+    digitos do celular atual.
 
-    Medido na base de julho/2026, sobre 2 milhoes de telefones preenchidos:
-    nenhum passa de 8 caracteres (o campo da Receita nao comporta mais), 89%
-    tem exatamente 8, e destes 23% comecam com 9. Fixo, que comeca com 2 a 5,
-    cabe nos 8 e esta inteiro.
+    O QUE NAO DA PARA SABER pelo dado: se o numero perdeu um digito ao ser
+    gravado ou se e um cadastro antigo que estava completo na epoca. Dois
+    casos reais mostraram padroes diferentes -- num deles o que faltava
+    batia com o fim do numero atual, no outro com o comeco -- e no segundo a
+    empresa ainda tinha mudado de DDD desde entao.
+
+    Por isso a tela nao promete qual digito falta. Diz que o numero e de
+    formato antigo e pode nao completar, que e o que se pode afirmar.
     """
     n = so_digitos(numero)
     return len(n) == 8 and n[0] in "89"
+
+
+# nome antigo, mantido enquanto templates e chamadas migram
+telefone_truncado = celular_antigo
 
 
 def _leitura(dir_dados=None):

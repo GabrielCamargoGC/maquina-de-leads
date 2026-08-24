@@ -49,14 +49,12 @@ def _data(d):
 
 @app.template_filter("telefone_incompleto")
 def _telefone_incompleto(numero):
-    """True quando o celular esta na base com 8 digitos.
+    """True para celular em formato pre-2012 (8 digitos comecando com 8/9).
 
-    O campo TELEFONE da Receita tem 8 caracteres e nunca foi ampliado para o
-    nono digito do celular. Mostrar o numero sem avisar faria a pessoa
-    discar e nao completar, achando que o dado esta errado -- quando na
-    verdade esta incompleto na origem.
+    Mostrar sem avisar faz a pessoa discar, nao completar, e concluir que o
+    dado esta errado -- quando na verdade e antigo.
     """
-    return consulta.telefone_truncado("", numero or "")
+    return consulta.celular_antigo("", numero or "")
 
 
 @app.template_filter("milhar")
