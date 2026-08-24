@@ -138,8 +138,10 @@
   <div data-tarefa
        data-rodando="{{ '1' if tarefa.rodando else '0' }}"
        data-url="{{ url_for('acesso.master_tarefa') }}">
-    <div class="barra" style="margin-bottom:8px">
+    <div class="barra dupla" style="margin-bottom:8px">
       <span data-tarefa-barra style="width: {{ tarefa.pct }}%"></span>
+      <span class="andando" data-tarefa-andando
+            style="width: {{ tarefa.pct_andando }}%"></span>
     </div>
     <p class="dica" data-tarefa-texto>
       {% if tarefa.rodando %}
@@ -377,6 +379,7 @@
     var raiz = document.querySelector("[data-tarefa]");
     if (!raiz) return;
     var barra = raiz.querySelector("[data-tarefa-barra]");
+    var andando = raiz.querySelector("[data-tarefa-andando]");
     var texto = raiz.querySelector("[data-tarefa-texto]");
     var botao = document.querySelector("[data-tarefa-botao]");
     var url = raiz.getAttribute("data-url");
@@ -384,6 +387,7 @@
 
     function pintar(e) {
       barra.style.width = (e.pct || 0) + "%";
+      if (andando) { andando.style.width = (e.pct_andando || 0) + "%"; }
       if (e.rodando) {
         texto.textContent = "Etapa " + (e.etapa + 1) + " de " + e.total_etapas +
                             " — " + e.rotulo + " (" + e.segundos + "s)";
@@ -395,6 +399,7 @@
         } else if (e.resultado) {
           texto.textContent = "Concluido: " + e.resultado + " em " + e.segundos + "s";
           barra.style.width = "100%";
+          if (andando) { andando.style.width = "0%"; }
         } else {
           texto.textContent = "Nenhuma tarefa em andamento.";
         }

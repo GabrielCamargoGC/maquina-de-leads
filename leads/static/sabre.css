@@ -654,3 +654,35 @@ code.destaque {
 
 /* botao que disparou fica desabilitado enquanto espera */
 .botao[data-esperando="1"] { opacity: .6; cursor: progress; }
+
+
+/* ---------------- barra de tarefa longa ---------------- */
+
+/* A parte cheia sao as etapas CONCLUIDAS. A etapa em andamento vira uma
+   faixa listrada em movimento, do tamanho de uma etapa.
+   
+   Por que nao simplesmente animar a barra ate 100%: o DuckDB nao reporta
+   andamento dentro de uma gravacao, entao qualquer numero ali seria
+   inventado. A faixa mostra QUAL etapa esta rodando sem fingir saber quanto
+   dela ja foi -- e resolve o efeito de "barra parada" da primeira etapa, que
+   sozinha leva a maior parte do tempo. */
+.barra .andando {
+  display: block;
+  height: 100%;
+  border-radius: 980px;
+  background-image: linear-gradient(
+    115deg,
+    var(--sabre) 25%, var(--sabre-texto) 25%, var(--sabre-texto) 50%,
+    var(--sabre) 50%, var(--sabre) 75%, var(--sabre-texto) 75%);
+  background-size: 22px 22px;
+  animation: listras 1s linear infinite;
+  opacity: .75;
+}
+@keyframes listras { to { background-position: 22px 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .barra .andando { animation: none; opacity: .5; }
+}
+
+.barra.dupla { display: flex; }
+.barra.dupla > span { flex: 0 0 auto; }

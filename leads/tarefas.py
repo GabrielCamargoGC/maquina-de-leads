@@ -48,6 +48,9 @@ def estado():
     # ela fica em zero, o que e honesto: nao ha como saber quanto falta
     # dentro de um COPY do DuckDB.
     d["pct"] = min(100, int(d["etapa"] / total * 100))
+    # Largura da faixa animada: uma etapa. So aparece enquanto roda -- e a
+    # etapa atual, cujo andamento interno nao da para saber.
+    d["pct_andando"] = int(100 / total) if d["rodando"] else 0
     return d
 
 
