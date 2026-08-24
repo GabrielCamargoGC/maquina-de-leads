@@ -53,7 +53,12 @@ def situacao():
     ok_ramo, ramo = _git("rev-parse", "--abbrev-ref", "HEAD")
     ok_org, origem = _git("remote", "get-url", "origin")
     _, atual = _git("log", "-1", "--format=%h %s")
-    ok_limpo, sujo = _git("status", "--porcelain")
+    # --untracked-files=no de proposito: arquivo NOVO na pasta nao corre
+    # risco num pull, porque o git so sobrescreve o que ele rastreia. Sem
+    # esse cuidado, as pastas que o proprio programa cria (exports/, tools/,
+    # .tmp/) bloqueavam a atualizacao como se fossem alteracao de codigo --
+    # foi o que aconteceu na primeira vez que o botao foi usado.
+    ok_limpo, sujo = _git("status", "--porcelain", "--untracked-files=no")
     return {
         "ok": ok_ramo and ok_org,
         "ramo": ramo if ok_ramo else "?",

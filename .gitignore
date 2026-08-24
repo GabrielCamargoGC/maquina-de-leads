@@ -1,6 +1,9 @@
-# dados (nunca no Git - varios GB)
+# dados e artefatos que o proprio programa cria
 dados/
 downloads/
+exports/
+tools/
+.tmp/
 leads_cnpj/cache/
 leads_cnpj/venv/
 leads_cnpj/historico_web/
