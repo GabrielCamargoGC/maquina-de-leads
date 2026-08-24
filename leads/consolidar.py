@@ -255,45 +255,59 @@ def gerar_indice_consulta(con, entrada, destino):
     continua varrendo a base principal, que para esse caso e menor que o
     indice. O indice acelera busca exata e "comeca com", e mais nada.
     """
-    alvo = entrada / "indice.parquet"
+    alvo = entrada / "indice"
+    provisorio = entrada / "indice.montando"
     fonte = (destino / "**" / "*.parquet").as_posix()
     leitura = (f"read_parquet('{fonte}', hive_partitioning=1, "
                f"hive_types={hive_tipos_sql()})")
 
-    con.execute(
-        f"""COPY (
-                SELECT chave, tipo, cnpj_numerico FROM (
-                    SELECT upper(strip_accents(razao_social)) AS chave,
-                           'R' AS tipo, cnpj_numerico
-                    FROM {leitura}
-                    WHERE razao_social IS NOT NULL AND razao_social <> ''
+    # Um arquivo por tipo, e nao os tres juntos. A primeira versao ordenava
+    # ~150 milhoes de chaves de uma vez e ficava dezenas de minutos sem dizer
+    # nada -- de fora era indistinguivel de travado. Tres ordenacoes menores
+    # terminam antes, cada uma reporta ao acabar, e a consulta so abre o
+    # arquivo do tipo que interessa.
+    partes = [
+        ("R", "razao social",
+         f"SELECT upper(strip_accents(razao_social)) AS chave, cnpj_numerico "
+         f"FROM {leitura} WHERE razao_social IS NOT NULL AND razao_social <> ''"),
+        ("F", "nome fantasia",
+         f"SELECT upper(strip_accents(nome_fantasia)) AS chave, cnpj_numerico "
+         f"FROM {leitura} WHERE nome_fantasia IS NOT NULL AND nome_fantasia <> ''"),
+        # telefone entra com DDD colado e so digitos, que e como a tela
+        # normaliza o que a pessoa digita
+        ("T", "telefone",
+         f"SELECT ddd1 || telefone1 AS chave, cnpj_numerico FROM {leitura} "
+         f"WHERE telefone1 IS NOT NULL AND telefone1 <> '' "
+         f"UNION ALL "
+         f"SELECT ddd2 || telefone2, cnpj_numerico FROM {leitura} "
+         f"WHERE telefone2 IS NOT NULL AND telefone2 <> ''"),
+    ]
 
-                    UNION ALL
-                    SELECT upper(strip_accents(nome_fantasia)), 'F', cnpj_numerico
-                    FROM {leitura}
-                    WHERE nome_fantasia IS NOT NULL AND nome_fantasia <> ''
+    # Monta num nome provisorio e so renomeia no fim. Interrupcao no meio
+    # deixa lixo, nunca um indice pela metade em uso -- e indice incompleto
+    # nao da erro, so acha menos empresas do que existem, calado.
+    shutil.rmtree(provisorio, ignore_errors=True)
+    provisorio.mkdir(parents=True)
 
-                    -- telefone entra com DDD colado e so digitos, que e como
-                    -- a tela normaliza o que a pessoa digita
-                    UNION ALL
-                    SELECT ddd1 || telefone1, 'T', cnpj_numerico
-                    FROM {leitura}
-                    WHERE telefone1 IS NOT NULL AND telefone1 <> ''
+    total = 0
+    for tipo, rotulo, sql in partes:
+        t0 = time.time()
+        pasta = provisorio / f"tipo={tipo}"
+        pasta.mkdir()
+        con.execute(
+            f"COPY ({sql} ORDER BY chave) TO '{(pasta / 'dados.parquet').as_posix()}' "
+            f"(FORMAT PARQUET, COMPRESSION {COMPRESSAO}, ROW_GROUP_SIZE 200000)"
+        )
+        n = con.execute(
+            f"SELECT count(*) FROM read_parquet('{(pasta / 'dados.parquet').as_posix()}')"
+        ).fetchone()[0]
+        total += n
+        _log(f"    indice {rotulo}: {n:,} chaves em {time.time()-t0:.0f}s")
 
-                    UNION ALL
-                    SELECT ddd2 || telefone2, 'T', cnpj_numerico
-                    FROM {leitura}
-                    WHERE telefone2 IS NOT NULL AND telefone2 <> ''
-                )
-                ORDER BY chave
-            ) TO '{alvo.as_posix()}'
-              (FORMAT PARQUET, COMPRESSION {COMPRESSAO}, ROW_GROUP_SIZE 200000)"""
-    )
-    n = con.execute(
-        f"SELECT count(*) FROM read_parquet('{alvo.as_posix()}')"
-    ).fetchone()[0]
-    _log(f"  indice de consulta: {n:,} chaves ({_fmt(_tamanho(alvo))})")
-    return n
+    shutil.rmtree(alvo, ignore_errors=True)
+    provisorio.rename(alvo)
+    _log(f"  indice de consulta: {total:,} chaves ({_fmt(_tamanho(alvo))})")
+    return total
 
 
 def gerar_indice_cidades(con, entrada, destino):

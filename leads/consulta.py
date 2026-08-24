@@ -19,6 +19,7 @@ Por que cada caso custa diferente:
 """
 import re
 import unicodedata
+from pathlib import Path
 
 from . import busca, config
 
@@ -83,14 +84,16 @@ def _leitura(dir_dados=None):
     return busca.leitura((d / "empresas_final" / "**" / "*.parquet").as_posix())
 
 
-def _indice(dir_dados=None):
+def _indice(tipo, dir_dados=None):
+    """Caminho do indice daquele tipo. Um arquivo por tipo: a consulta abre
+    so o que interessa, e cada um e montado e conferido separadamente."""
     d = config.DIR_ATUAL if dir_dados is None else dir_dados
-    return (d / "indice.parquet").as_posix()
+    return (d / "indice" / f"tipo={tipo}" / "dados.parquet").as_posix()
 
 
 def tem_indice(dir_dados=None):
     d = config.DIR_ATUAL if dir_dados is None else dir_dados
-    return (d / "indice.parquet").exists()
+    return (d / "indice").is_dir()
 
 
 COLUNAS = busca.COLUNAS_TELA + [
@@ -121,23 +124,40 @@ def _por_cnpjs(cnpjs, dir_dados=None, limite=LIMITE_PADRAO):
     return [dict(zip(nomes, l)) for l in rel.fetchall()]
 
 
-def _chaves(valor, tipo_indice, prefixo=False, limite=LIMITE_PADRAO):
-    """CNPJs cujo nome/telefone bate, lendo o indice ordenado."""
-    cur = busca.conexao().cursor()
-    caminho = _indice()
+def _chaves(valor, tipo_indice, prefixo=False, limite=LIMITE_PADRAO,
+            dir_dados=None):
+    """CNPJs cujo nome/telefone bate, lendo o indice ordenado.
+
+    Devolve None -- e nao lista vazia -- quando o indice nao pode ser lido.
+    A diferenca importa: vazio significa "procurei e nao achei", None
+    significa "nao consegui procurar aqui", e so o segundo justifica cair
+    para a varredura da base.
+
+    Indice corrompido ou pela metade nao pode derrubar a tela. Ja aconteceu:
+    um arquivo truncado sobrou de uma geracao interrompida, a checagem de
+    existencia deu positivo, e toda consulta por nome e telefone passou a
+    responder erro.
+    """
+    cur = busca.conexao(dir_dados).cursor()
+    caminho = _indice(tipo_indice, dir_dados)
+    if not Path(caminho).exists():
+        return None
     if prefixo:
         # intervalo em vez de LIKE: com >= e < o Parquet compara com o
         # minimo e o maximo de cada bloco e pula o que nao pode conter a
         # chave. Um LIKE 'X%' obrigaria a ler tudo.
         fim = valor[:-1] + chr(ord(valor[-1]) + 1) if valor else valor
         sql = (f"SELECT DISTINCT cnpj_numerico FROM read_parquet('{caminho}') "
-               f"WHERE chave >= ? AND chave < ? AND tipo = ? LIMIT {int(limite)}")
-        params = [valor, fim, tipo_indice]
+               f"WHERE chave >= ? AND chave < ? LIMIT {int(limite)}")
+        params = [valor, fim]
     else:
         sql = (f"SELECT DISTINCT cnpj_numerico FROM read_parquet('{caminho}') "
-               f"WHERE chave = ? AND tipo = ? LIMIT {int(limite)}")
-        params = [valor, tipo_indice]
-    return [r[0] for r in cur.execute(sql, params).fetchall()]
+               f"WHERE chave = ? LIMIT {int(limite)}")
+        params = [valor]
+    try:
+        return [r[0] for r in cur.execute(sql, params).fetchall()]
+    except Exception:
+        return None
 
 
 def procurar(termo, limite=LIMITE_PADRAO, dir_dados=None):
@@ -167,9 +187,9 @@ def procurar(termo, limite=LIMITE_PADRAO, dir_dados=None):
         return [dict(zip(nomes, l)) for l in rel.fetchall()], tipo, None
 
     if tipo == TELEFONE:
-        if tem_indice(dir_dados):
-            return _por_cnpjs(_chaves(valor, "T", limite=limite),
-                              dir_dados, limite), tipo, None
+        achados = _chaves(valor, "T", limite=limite, dir_dados=dir_dados)
+        if achados is not None:
+            return _por_cnpjs(achados, dir_dados, limite), tipo, None
         sql = (f"SELECT {', '.join(COLUNAS)} FROM {_leitura(dir_dados)} "
                f"WHERE (ddd1 || telefone1) = ? OR (ddd2 || telefone2) = ? "
                f"LIMIT {int(limite)}")
@@ -179,13 +199,16 @@ def procurar(termo, limite=LIMITE_PADRAO, dir_dados=None):
                 "Sem indice nesta base: a consulta por telefone varreu tudo.")
 
     # --- nome ---
-    if tem_indice(dir_dados):
-        cnpjs = _chaves(valor, "R", limite=limite) or []
-        cnpjs += [c for c in _chaves(valor, "F", limite=limite) if c not in cnpjs]
+    exatos = _chaves(valor, "R", limite=limite, dir_dados=dir_dados)
+    fantasia = _chaves(valor, "F", limite=limite, dir_dados=dir_dados)
+    if exatos is not None or fantasia is not None:
+        cnpjs = list(exatos or [])
+        cnpjs += [c for c in (fantasia or []) if c not in cnpjs]
         if not cnpjs:
-            cnpjs = _chaves(valor, "R", prefixo=True, limite=limite) or []
-            cnpjs += [c for c in _chaves(valor, "F", prefixo=True, limite=limite)
-                      if c not in cnpjs]
+            pr = _chaves(valor, "R", prefixo=True, limite=limite, dir_dados=dir_dados)
+            pf = _chaves(valor, "F", prefixo=True, limite=limite, dir_dados=dir_dados)
+            cnpjs = list(pr or [])
+            cnpjs += [c for c in (pf or []) if c not in cnpjs]
         if cnpjs:
             return _por_cnpjs(cnpjs, dir_dados, limite), tipo, None
         aviso = ("Nenhum nome comeca assim. Procurei o trecho no meio do nome "
