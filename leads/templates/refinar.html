@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block titulo %}Refinar — Maquina de Leads{% endblock %}
+{% block cabecalho %}Refinar{% endblock %}
+{% block subtitulo %}Filtre uma planilha que voce ja exportou daqui.{% endblock %}
+
+{% block conteudo %}
+
+{% if erro %}
+  <div class="card"><div class="alerta alerta-erro">{{ erro }}</div></div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data"
+      action="{{ url_for('tela_refinar') }}"
+      data-espera="Lendo a planilha e aplicando os filtros.">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+
+  <div class="card">
+    <h2>1. A planilha</h2>
+    <div class="campo">
+      <label for="arquivo">Arquivo exportado na aba Planilhas</label>
+      <input class="entrada" id="arquivo" name="arquivo" type="file"
+             accept=".xlsx,.csv" required>
+      <p class="dica">
+        Aceita .xlsx e .csv, ate {{ limite_mb }} MB. So funciona com planilha
+        baixada deste sistema — o cabecalho e conferido.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Filtros</h2>
+
+    <div class="linha-form">
+      <div class="campo">
+        <label>Porte</label>
+        <div class="checks" style="margin-top:2px">
+          {% for p in ['Micro empresa', 'Pequeno porte', 'Demais', 'Nao informado'] %}
+            <label class="toggle">
+              <input type="checkbox" name="porte" value="{{ p }}"
+                     {{ 'checked' if p in (f.portes or []) }}> {{ p }}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="linha-form" style="margin-top:16px">
+      <div class="campo medio">
+        <label for="simples">Simples Nacional</label>
+        <select class="entrada" id="simples" name="simples">
+          <option value="">tanto faz</option>
+          <option value="Sim" {{ 'selected' if f.simples == 'Sim' }}>Sim</option>
+          <option value="Nao" {{ 'selected' if f.simples == 'Nao' }}>Nao</option>
+        </select>
+      </div>
+      <div class="campo medio">
+        <label for="mei">MEI</label>
+        <select class="entrada" id="mei" name="mei">
+          <option value="">tanto faz</option>
+          <option value="Sim" {{ 'selected' if f.mei == 'Sim' }}>Sim</option>
+          <option value="Nao" {{ 'selected' if f.mei == 'Nao' }}>Nao</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label>Situacao cadastral</label>
+        <div class="checks" style="margin-top:2px">
+          {% for s in ['Ativa', 'Baixada', 'Suspensa', 'Inapta'] %}
+            <label class="toggle">
+              <input type="checkbox" name="situacao" value="{{ s }}"
+                     {{ 'checked' if s in (f.situacoes or []) }}> {{ s }}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="checks" style="margin-top:16px">
+      <label class="toggle">
+        <input type="checkbox" name="com_telefone" {{ 'checked' if f.com_telefone }}>
+        So com telefone
+      </label>
+      <label class="toggle">
+        <input type="checkbox" name="com_email" {{ 'checked' if f.com_email }}>
+        So com e-mail
+      </label>
+      <label class="toggle">
+        <input type="checkbox" name="so_matriz" {{ 'checked' if f.so_matriz }}>
+        So matriz
+      </label>
+    </div>
+
+    <details style="margin-top:18px" {{ 'open' if f.tem_avancado }}>
+      <summary style="cursor:pointer;color:var(--texto-2)">Mais filtros</summary>
+      <div class="linha-form" style="margin-top:14px">
+        <div class="campo pequeno">
+          <label for="uf">UF</label>
+          <input class="entrada" id="uf" name="uf" value="{{ f.uf_txt or '' }}"
+                 placeholder="SP, PR">
+        </div>
+        <div class="campo">
+          <label for="cidade">Cidade</label>
+          <input class="entrada" id="cidade" name="cidade" value="{{ f.cidade or '' }}">
+        </div>
+        <div class="campo">
+          <label for="bairro">Bairro</label>
+          <input class="entrada" id="bairro" name="bairro" value="{{ f.bairro or '' }}">
+        </div>
+        <div class="campo">
+          <label for="cnae">CNAE ou ramo</label>
+          <input class="entrada" id="cnae" name="cnae" value="{{ f.cnae or '' }}">
+        </div>
+      </div>
+      <div class="linha-form" style="margin-top:14px">
+        <div class="campo medio">
+          <label for="capital_min">Capital minimo</label>
+          <input class="entrada" id="capital_min" name="capital_min" type="number"
+                 step="any" value="{{ f.capital_min if f.capital_min is not none }}">
+        </div>
+        <div class="campo medio">
+          <label for="aberta_de">Aberta de</label>
+          <input class="entrada" id="aberta_de" name="aberta_de" type="date"
+                 value="{{ f.aberta_de or '' }}">
+        </div>
+        <div class="campo medio">
+          <label for="aberta_ate">ate</label>
+          <input class="entrada" id="aberta_ate" name="aberta_ate" type="date"
+                 value="{{ f.aberta_ate or '' }}">
+        </div>
+      </div>
+      <div class="linha-form" style="margin-top:14px">
+        <div class="campo">
+          <label for="natureza">Natureza juridica</label>
+          <input class="entrada" id="natureza" name="natureza" value="{{ f.natureza or '' }}"
+                 placeholder="codigo, ex.: 2135">
+          <p class="dica">So em planilha exportada depois desta atualizacao.</p>
+        </div>
+        <div class="campo medio">
+          <label for="situacao_de">Situacao desde</label>
+          <input class="entrada" id="situacao_de" name="situacao_de" type="date"
+                 value="{{ f.situacao_de or '' }}">
+        </div>
+        <div class="campo medio">
+          <label for="situacao_ate">ate</label>
+          <input class="entrada" id="situacao_ate" name="situacao_ate" type="date"
+                 value="{{ f.situacao_ate or '' }}">
+        </div>
+      </div>
+    </details>
+
+    <div class="acoes">
+      <button class="botao primario" type="submit">Refinar</button>
+    </div>
+  </div>
+</form>
+
+{% if resultado %}
+  <div class="card">
+    <div class="resumo">
+      <div>
+        <div class="num">
+          {{ resultado.total|milhar }} &rarr; {{ resultado.sobraram|milhar }}
+        </div>
+        <div class="label">
+          contato(s) que batem com os filtros
+          &middot; {{ '%.2f'|format(segundos) }}s
+          {% if not resultado.condicoes %}&middot; nenhum filtro aplicado{% endif %}
+        </div>
+      </div>
+      {% if resultado.sobraram %}
+        <div class="acoes" style="margin:0">
+          <a class="botao primario"
+             href="{{ url_for('baixar_refinado', ident=resultado.id, formato='xlsx') }}">
+            Baixar Excel</a>
+          <a class="botao secundario"
+             href="{{ url_for('baixar_refinado', ident=resultado.id, formato='csv') }}">
+            Baixar CSV</a>
+        </div>
+      {% endif %}
+    </div>
+
+    {% if faltando %}
+      <div class="alerta alerta-aviso">
+        Esta planilha nao tem {{ faltando|join(', ') }}. Foi exportada antes
+        desses campos existirem — os filtros correspondentes foram ignorados.
+        Exporte de novo para usa-los.
+      </div>
+    {% endif %}
+  </div>
+
+  {% if resultado.previa %}
+    <div class="card" style="padding:0">
+      <div style="padding:22px 26px 0">
+        <h2 style="margin-bottom:4px">Conferencia</h2>
+        <p class="dica">
+          Primeiras {{ resultado.previa|length }} linhas do resultado. A
+          planilha traz todas as {{ resultado.sobraram|milhar }}.
+        </p>
+      </div>
+      <div class="tabela-rolagem">
+        <table>
+          <thead>
+            <tr>{% for c in colunas_previa %}<th>{{ c }}</th>{% endfor %}</tr>
+          </thead>
+          <tbody>
+          {% for l in resultado.previa %}
+            <tr>{% for c in colunas_previa %}<td>{{ l.get(c) or '' }}</td>{% endfor %}</tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% elif resultado.sobraram == 0 %}
+    <div class="card">
+      <div class="alerta alerta-aviso">
+        Nenhum contato da planilha bate com esses filtros. Afrouxe algum
+        criterio e tente de novo.
+      </div>
+    </div>
+  {% endif %}
+{% endif %}
+
+{% endblock %}

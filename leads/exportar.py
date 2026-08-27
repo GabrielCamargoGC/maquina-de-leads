@@ -32,6 +32,7 @@ ROTULOS = {
     "razao_social": "Razao Social",
     "nome_fantasia": "Nome Fantasia",
     "situacao_desc": "Situacao",
+    "data_situacao": "Situacao Desde",
     "cnae_principal": "CNAE",
     "cnae_descricao": "Ramo (CNAE)",
     "porte_desc": "Porte",
@@ -51,6 +52,7 @@ ROTULOS = {
     "telefone2": "Telefone 2",
     "email": "E-mail",
     "capital_social": "Capital Social",
+    "natureza_juridica": "Natureza Juridica",
     "data_abertura": "Data de Abertura",
     "matriz_filial_desc": "Matriz/Filial",
 }

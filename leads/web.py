@@ -27,7 +27,7 @@ from flask import (Flask, Response, redirect, render_template, request,
                    send_file, url_for)
 
 from . import (acesso, auditoria, busca, config, consulta, estado,
-               exportar, novidades)
+               exportar, novidades, refinar)
 
 app = Flask(__name__)
 
@@ -238,6 +238,139 @@ def tela_empresa(cnpj):
         secundarios=consulta.cnaes_secundarios(e.get("cnae_secundaria")),
         irmas=consulta.irmas(e.get("cnpj_basico"), e.get("cnpj_numerico")),
     )
+
+
+MAX_UPLOAD_MB = 50
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
+
+
+class FormRefinar:
+    """Espelho do formulario de Refinar, para redesenhar a tela preenchida."""
+
+    def __init__(self, form):
+        self.portes = form.getlist("porte")
+        self.situacoes = form.getlist("situacao")
+        self.simples = (form.get("simples") or "").strip()
+        self.mei = (form.get("mei") or "").strip()
+        self.com_telefone = form.get("com_telefone") in ("1", "on", "true")
+        self.com_email = form.get("com_email") in ("1", "on", "true")
+        self.so_matriz = form.get("so_matriz") in ("1", "on", "true")
+        self.uf_txt = (form.get("uf") or "").strip()
+        self.ufs = [u.strip().upper() for u in self.uf_txt.split(",") if u.strip()]
+        self.cidade = (form.get("cidade") or "").strip()
+        self.bairro = (form.get("bairro") or "").strip()
+        self.cnae = (form.get("cnae") or "").strip()
+        self.natureza = (form.get("natureza") or "").strip()
+        self.capital_min = FormFiltros._numero(form.get("capital_min"))
+        self.aberta_de = (form.get("aberta_de") or "").strip()
+        self.aberta_ate = (form.get("aberta_ate") or "").strip()
+        self.situacao_de = (form.get("situacao_de") or "").strip()
+        self.situacao_ate = (form.get("situacao_ate") or "").strip()
+
+    @property
+    def tem_avancado(self):
+        return bool(self.ufs or self.cidade or self.bairro or self.cnae
+                    or self.natureza or self.capital_min is not None
+                    or self.aberta_de or self.aberta_ate
+                    or self.situacao_de or self.situacao_ate)
+
+    def como_dict(self):
+        return {
+            "portes": self.portes, "situacoes": self.situacoes,
+            "simples": self.simples, "mei": self.mei,
+            "com_telefone": self.com_telefone, "com_email": self.com_email,
+            "so_matriz": self.so_matriz, "ufs": self.ufs,
+            "cidade": self.cidade, "bairro": self.bairro, "cnae": self.cnae,
+            "natureza": self.natureza, "capital_min": self.capital_min,
+            "aberta_de": self.aberta_de, "aberta_ate": self.aberta_ate,
+            "situacao_de": self.situacao_de, "situacao_ate": self.situacao_ate,
+        }
+
+
+@app.route("/refinar", methods=["GET", "POST"])
+def tela_refinar():
+    # request.form vem vazio no GET; a mesma classe serve para as duas
+    # passagens, e a tela sai com os campos como o usuario deixou.
+    f = FormRefinar(request.form)
+    ctx = dict(_comum("refinar"), f=f, erro=None, resultado=None,
+               colunas_previa=[], faltando=[], segundos=0.0,
+               limite_mb=MAX_UPLOAD_MB)
+
+    if request.method == "POST":
+        acesso.conferir_csrf()
+        enviado = request.files.get("arquivo")
+        if not enviado or not enviado.filename:
+            ctx["erro"] = "Escolha um arquivo."
+            return render_template("refinar.html", **ctx)
+
+        sufixo = Path(enviado.filename).suffix.lower()
+        if sufixo not in (".xlsx", ".csv"):
+            ctx["erro"] = "Envie um arquivo .xlsx ou .csv."
+            return render_template("refinar.html", **ctx)
+
+        # A planilha vai para um arquivo temporario e some ao terminar: e
+        # lista de contato de cliente, nao tem por que ficar no servidor.
+        import tempfile
+        temporario = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=sufixo) as tmp:
+                enviado.save(tmp)
+                temporario = Path(tmp.name)
+
+            t0 = time.time()
+            info = refinar.inspecionar(temporario)
+            resultado = refinar.refinar(temporario, f.como_dict(), info["internas"])
+            ctx["segundos"] = time.time() - t0
+            ctx["resultado"] = resultado
+            if resultado["previa"]:
+                ctx["colunas_previa"] = list(resultado["previa"][0])[:8]
+
+            rotulos_ausentes = [
+                exportar.ROTULOS[i] for i in ("natureza_juridica", "data_situacao")
+                if i not in info["internas"]
+            ]
+            ctx["faltando"] = rotulos_ausentes
+
+            auditoria.registrar(
+                auditoria.REFINOU,
+                usuario=(acesso.usuario_atual() or {}).get("usuario", ""),
+                ip=acesso._ip(), entraram=resultado["total"],
+                sairam=resultado["sobraram"], filtros=resultado["condicoes"],
+            )
+        except refinar.ErroPlanilha as e:
+            ctx["erro"] = str(e)
+        except Exception as e:
+            traceback.print_exc()
+            ctx["erro"] = f"Erro inesperado ao ler a planilha: {e}"
+        finally:
+            if temporario:
+                temporario.unlink(missing_ok=True)
+
+    return render_template("refinar.html", **ctx)
+
+
+@app.errorhandler(413)
+def _grande_demais(e):
+    """Sem isto, a planilha acima do limite cai na pagina crua do Flask, em
+    ingles e sem dizer qual e o limite."""
+    return render_template(
+        "erro.html", codigo=413, nome="Arquivo grande demais",
+        mensagem=(f"O envio passa de {MAX_UPLOAD_MB} MB. Exporte a planilha "
+                  f"em partes menores e refine uma de cada vez."),
+        **_comum("refinar")), 413
+
+
+@app.route("/refinar/<ident>/baixar/<formato>")
+def baixar_refinado(ident, formato):
+    if formato not in ("xlsx", "csv"):
+        return redirect(url_for("tela_refinar"))
+    try:
+        caminho = refinar.escrever(ident, formato)
+    except refinar.ErroPlanilha as e:
+        return render_template("erro.html", codigo=404, nome="Resultado expirado",
+                               mensagem=str(e), **_comum("refinar")), 404
+    return send_file(caminho, as_attachment=True,
+                     download_name=f"refinado.{formato}")
 
 
 @app.route("/novidades")
