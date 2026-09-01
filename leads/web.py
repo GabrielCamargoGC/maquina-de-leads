@@ -80,6 +80,40 @@ def _globais():
     return {"favicon": FAVICON}
 
 
+# CSS e JS saem com a versao na URL: /static/sabre.css?v=68b5c2a1
+#
+# Sem isto, arquivo que ja existia continua vindo do cache depois de uma
+# atualizacao -- o navegador de quem ja usava o site, e principalmente o
+# Cloudflare, que guarda .css e .js por extensao. Deu exatamente nisso na
+# primeira vez: o cidades.js novo carregou (arquivo inedito, cache nenhum) e
+# o sabre.css veio velho, entao a tela montou o campo de cidades sem nenhum
+# estilo. Pedir Ctrl+F5 para 15 pessoas a cada atualizacao nao e solucao.
+#
+# A versao e o mtime do arquivo. git pull mexe no mtime, e o servico
+# reinicia logo depois, entao o valor se renova sozinho -- ninguem precisa
+# lembrar de incrementar nada.
+_versoes_estaticas = {}
+
+
+@app.url_defaults
+def _versionar_estatico(endpoint, valores):
+    if endpoint != "static" or "filename" not in valores:
+        return
+    nome = valores["filename"]
+    if nome not in _versoes_estaticas:
+        try:
+            caminho = Path(app.static_folder) / nome
+            _versoes_estaticas[nome] = format(int(caminho.stat().st_mtime), "x")
+        except OSError:
+            _versoes_estaticas[nome] = "0"   # arquivo sumiu: nao quebra a pagina
+    valores["v"] = _versoes_estaticas[nome]
+
+
+# Com a versao na URL, o arquivo pode ser guardado para sempre: quando muda,
+# muda tambem o endereco, e o cache antigo simplesmente deixa de ser pedido.
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000
+
+
 # Liga contas, sessao e o porteiro que exige login. Fica aqui, logo apos
 # criar o app, para que nenhuma rota registrada abaixo escape da protecao.
 acesso.instalar(app)
