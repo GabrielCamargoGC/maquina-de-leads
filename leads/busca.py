@@ -158,6 +158,22 @@ def resolver_cidades(nomes, uf=None, dir_dados=None):
     return achados, sugestoes
 
 
+def listar_cidades(dir_dados=None):
+    """Todos os municipios da base: (nome, uf, quantidade de empresas).
+
+    Alimenta o autocompletar do campo de cidades. Sao ~5.6 mil linhas e um
+    arquivo de ~200 KB, entao vale mandar a lista inteira para o navegador
+    uma vez e filtrar la: a alternativa -- uma consulta por tecla digitada --
+    poria 15 pessoas batendo no DuckDB a cada letra.
+    """
+    cur = conexao(dir_dados).cursor()
+    cam = _caminhos(dir_dados)
+    return cur.execute(
+        f"SELECT municipio, uf, qtd_empresas FROM read_parquet('{cam['cidades']}') "
+        f"ORDER BY uf, municipio"
+    ).fetchall()
+
+
 def resolver_cnaes(termo, dir_dados=None):
     """Codigo, prefixo de codigo ou palavra-chave -> lista de codigos.
 

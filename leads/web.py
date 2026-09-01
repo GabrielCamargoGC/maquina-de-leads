@@ -23,8 +23,8 @@ from pathlib import Path
 
 from urllib.parse import quote
 
-from flask import (Flask, Response, redirect, render_template, request,
-                   send_file, url_for)
+from flask import (Flask, Response, jsonify, redirect, render_template,
+                   request, send_file, url_for)
 
 from . import (acesso, auditoria, busca, config, consulta, estado,
                exportar, novidades, refinar)
@@ -183,6 +183,39 @@ def _comum(pagina):
 
 
 # ------------------------------------------------------------ telas
+
+
+# Lista de municipios, servida uma vez por versao da base.
+#
+# Montar isto a cada requisicao seria desperdicio: a base so muda uma vez por
+# mes, e a resposta e identica entre uma troca e outra. A chave do cache e a
+# referencia da base, entao a troca mensal invalida sozinha.
+_cidades_cache = {}
+
+
+@app.route("/api/cidades")
+def api_cidades():
+    if not busca.base_pronta():
+        return jsonify({"ref": "", "cidades": []})
+
+    ref = str(estado.ler().get("referencia") or "sem-ref")
+    if ref not in _cidades_cache:
+        _cidades_cache.clear()          # so a versao corrente interessa
+        _cidades_cache[ref] = [
+            [nome, uf, int(qtd or 0)] for nome, uf, qtd in busca.listar_cidades()
+        ]
+    lista = _cidades_cache[ref]
+
+    etiqueta = f'W/"cidades-{ref}-{len(lista)}"'
+    if request.headers.get("If-None-Match") == etiqueta:
+        return Response(status=304, headers={"ETag": etiqueta})
+
+    r = jsonify({"ref": ref, "cidades": lista})
+    # private: e conteudo de usuario logado, o Cloudflare nao deve guardar
+    # copia compartilhada.
+    r.headers["Cache-Control"] = "private, max-age=86400"
+    r.headers["ETag"] = etiqueta
+    return r
 
 
 @app.route("/busca")

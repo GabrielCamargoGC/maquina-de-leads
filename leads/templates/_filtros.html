@@ -34,7 +34,11 @@
   <div class="linha-form">
     <div class="campo">
       <label>Cidades</label>
+      {# data-cidades liga o campo de etiquetas com autocompletar. Sem o
+         script, isto continua sendo o campo de texto de sempre, com as
+         cidades separadas por virgula -- e o servidor le igual. #}
       <input type="text" name="cidades" value="{{ f.cidades_txt }}"
+             data-cidades autocomplete="off"
              placeholder="Assis, Marilia, Ourinhos" required>
       <span class="dica">Uma ou varias, separadas por virgula</span>
     </div>

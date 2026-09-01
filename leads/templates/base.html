@@ -22,6 +22,9 @@
 </script>
 <link rel="icon" href="data:image/svg+xml,{{ favicon }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='sabre.css') }}">
+{# defer: o campo de cidades so e montado depois do HTML existir, e nada na
+   primeira pintura depende dele. #}
+<script defer src="{{ url_for('static', filename='cidades.js') }}"></script>
 {% block cabeca %}{% endblock %}
 </head>
 <body>

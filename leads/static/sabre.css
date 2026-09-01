@@ -723,3 +723,110 @@ tr:hover .copiar-mini,
 td .copiar-mini { }
 .dado-copiavel .copiar-mini { opacity: .55; }
 .dado-copiavel:hover .copiar-mini { opacity: 1; }
+
+/* ---------------------------------------------------------- cidades
+
+   Campo de cidades com etiquetas. A caixa imita o input comum -- mesma
+   borda, mesmo raio, mesmo foco laranja -- para nao parecer um enxerto de
+   outro sistema no meio do formulario.
+
+   Todas as cores saem das variaveis do tema, entao claro e escuro seguem
+   sozinhos, sem um bloco de regras para cada. */
+
+.cidades-campo { position: relative; }
+
+.cidades-caixa {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 1px solid var(--linha-forte);
+  border-radius: var(--raio-p);
+  background: var(--card-2);
+  cursor: text;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.cidades-caixa:focus-within {
+  border-color: var(--sabre);
+  background: var(--card);
+  box-shadow: 0 0 0 3.5px var(--sabre-fundo);
+}
+
+.cidades-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 6px 4px 10px;
+  font-size: 13.5px; line-height: 1;
+  color: var(--sabre-texto);
+  background: var(--sabre-fundo);
+  border: 1px solid var(--sabre-borda);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.cidades-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0;
+  border: 0; border-radius: 50%;
+  background: transparent; color: inherit;
+  cursor: pointer; opacity: .65;
+  transition: opacity .12s ease, background .12s ease;
+}
+.cidades-x:hover { opacity: 1; background: rgba(255,107,0,.18); }
+.cidades-x:focus-visible { outline: 2px solid var(--sabre); outline-offset: 1px; opacity: 1; }
+
+/* A entrada e invisivel por dentro da caixa: quem tem borda e a caixa.
+
+   Precisa de dois seletores de classe para vencer o ".campo input" la de
+   cima, que e mais especifico que uma classe sozinha -- sem isto o campo
+   fica com borda e largura de 100% e vira caixa dentro de caixa. */
+.cidades-caixa .cidades-entrada {
+  flex: 1 1 130px; width: auto; min-width: 130px;
+  border: 0; outline: none; background: transparent;
+  box-shadow: none;
+  font: inherit; font-size: 15px; color: var(--texto);
+  padding: 5px 4px;
+}
+.cidades-caixa .cidades-entrada:focus {
+  border: 0; background: transparent; box-shadow: none;
+}
+.cidades-caixa .cidades-entrada::placeholder { color: var(--texto-3); }
+
+.cidades-menu {
+  position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 6px);
+  margin: 0; padding: 5px; list-style: none;
+  max-height: 296px; overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-p);
+  box-shadow: var(--sombra-alta);
+}
+.cidades-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14.5px;
+  color: var(--texto);
+}
+.cidades-item.marcado { background: var(--sabre-fundo); color: var(--sabre-texto); }
+.cidades-uf {
+  font-size: 11.5px; font-weight: 600; letter-spacing: .04em;
+  color: var(--texto-3); margin-left: 4px;
+}
+.cidades-item.marcado .cidades-uf { color: inherit; opacity: .8; }
+/* A contagem e referencia, nao conteudo: numero tabular para os milhares
+   ficarem alinhados de uma linha para a outra. */
+.cidades-qtd {
+  font-size: 12.5px; color: var(--texto-3);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.cidades-item.marcado .cidades-qtd { color: inherit; opacity: .75; }
+
+/* Envio sem nenhuma cidade: a caixa pisca em vermelho no lugar da mensagem
+   nativa do navegador, que nao existe mais porque o campo virou hidden. */
+.cidades-faltando .cidades-caixa {
+  border-color: var(--erro-texto);
+  box-shadow: 0 0 0 3.5px var(--erro-fundo);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cidades-caixa, .cidades-x { transition: none; }
+}
