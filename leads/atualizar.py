@@ -40,7 +40,7 @@ from pathlib import Path
 from . import config, consolidar, estado, exportar, fonte_rfb, importador
 
 NOME_SERVICO = os.environ.get("LEADS_SERVICO", "LeadsCNPJ")
-DIAS_GUARDAR_EXPORT = 7
+DIAS_GUARDAR_EXPORT = exportar.DIAS_GUARDAR  # uma constante so, definida em exportar.py
 
 
 def arquivo_log():

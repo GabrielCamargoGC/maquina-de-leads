@@ -517,6 +517,7 @@ def saude():
 def criar_app():
     config.garantir_pastas()
     exportar.iniciar_workers()
+    exportar.iniciar_faxina()
     return app
 
 

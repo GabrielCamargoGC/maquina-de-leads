@@ -14,6 +14,7 @@ pessoas.
 """
 import csv
 import json
+import os
 import queue
 import sqlite3
 import threading
@@ -24,6 +25,12 @@ from datetime import datetime
 from pathlib import Path
 
 from . import busca, config, novidades
+
+# Quanto tempo a planilha exportada fica no disco antes de sair.
+DIAS_GUARDAR = int(os.environ.get("LEADS_DIAS_EXPORT", "15"))
+
+# Intervalo da faxina automatica.
+HORAS_FAXINA = 24
 
 # Cabecalho da planilha em portugues -- quem recebe o arquivo nao precisa
 # saber o nome tecnico da coluna.
@@ -244,6 +251,47 @@ def iniciar_workers():
             _trabalhadores.append(t)
 
 
+_faxina = []
+
+
+def iniciar_faxina(dias=None):
+    """Apaga planilha velha uma vez por dia, de dentro do site.
+
+    Antes isto so acontecia no passo 5/5 do job de atualizacao -- que sai
+    logo no comeco quando a Receita nao publicou base nova. Ou seja: a
+    limpeza de 15 dias acontecia de fato uma vez por mes, e no mes inteiro
+    o disco so crescia.
+
+    Thread de fundo e nao tarefa agendada do Windows: o servico ja fica de
+    pe o tempo todo, e uma coisa a menos para instalar e lembrar.
+    """
+    dias = DIAS_GUARDAR if dias is None else dias
+
+    with _iniciado:
+        if _faxina:
+            return
+
+        def laco():
+            # Espera um pouco antes da primeira passada: subir o site e o
+            # que importa no instante do boot.
+            time.sleep(90)
+            while True:
+                try:
+                    n = limpar_antigos(dias)
+                    if n:
+                        print(f"[faxina] {n} planilha(s) com mais de {dias} "
+                              f"dias removida(s)", flush=True)
+                except Exception:
+                    # Faxina que falha nao pode derrubar o site nem a propria
+                    # thread: erra hoje, tenta de novo amanha.
+                    traceback.print_exc()
+                time.sleep(HORAS_FAXINA * 3600)
+
+        t = threading.Thread(target=laco, daemon=True, name="faxina-exports")
+        t.start()
+        _faxina.append(t)
+
+
 def enfileirar(filtros, formato="csv", descricao="", dir_dados=None, fonte="busca"):
     iniciar_workers()
     if formato not in ("csv", "xlsx"):
@@ -265,19 +313,37 @@ def enfileirar(filtros, formato="csv", descricao="", dir_dados=None, fonte="busc
     return job_id
 
 
-def limpar_antigos(dias=7):
+def limpar_antigos(dias=DIAS_GUARDAR):
     """Export e descartavel: quem precisa de novo refaz em 2 segundos.
-    Guardar semanas de planilha so enche o disco do desktop."""
+    Guardar semanas de planilha so enche o disco do desktop.
+
+    Cada arquivo tem o proprio try. No Windows, planilha que esta sendo
+    baixada naquele instante fica travada e o unlink estoura -- sem esta
+    protecao o erro subia e o laco parava no meio, deixando sem limpar tudo
+    que vinha depois. O arquivo travado hoje sai na faxina de amanha.
+    """
     corte = time.time() - dias * 86400
     removidos = 0
     for f in config.DIR_EXPORTS.glob("*.*"):
-        if f.stat().st_mtime < corte:
-            f.unlink(missing_ok=True)
-            removidos += 1
-    con = _conectar_banco()
-    con.execute(
-        "DELETE FROM export_job WHERE criado_em < datetime('now', ?)", (f"-{dias} days",)
-    )
-    con.commit()
-    con.close()
+        try:
+            if f.stat().st_mtime < corte:
+                f.unlink()
+                removidos += 1
+        except OSError:
+            continue
+    # A limpeza do banco vai em try separado de proposito: quem enche o disco
+    # sao os arquivos, e uma falha ao podar o historico nao pode anular o
+    # trabalho que ja foi feito la em cima.
+    try:
+        con = _conectar_banco()
+        try:
+            con.execute(
+                "DELETE FROM export_job WHERE criado_em < datetime('now', ?)",
+                (f"-{dias} days",),
+            )
+            con.commit()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        pass
     return removidos
