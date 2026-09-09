@@ -24,9 +24,7 @@
         <form method="post" action="{{ url_for('pedir_export') }}" class="acoes" style="margin:0"
               data-espera="Montando a planilha e colocando na fila.">
           <input type="hidden" name="csrf" value="{{ csrf }}">
-          {% for campo, valor in query.items() %}
-            <input type="hidden" name="{{ campo }}" value="{{ valor }}">
-          {% endfor %}
+          {{ ff.campos_ocultos(query) }}
           <input type="hidden" name="fonte" value="busca">
           <button type="submit" name="formato" value="xlsx" class="primario">Baixar Excel</button>
           <button type="submit" name="formato" value="csv" class="secundario">Baixar CSV</button>

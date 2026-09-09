@@ -245,7 +245,7 @@ class Filtros:
                  apenas_ativas=True, apenas_simples=False, apenas_mei=False,
                  com_telefone=False, com_email=False, portes=None,
                  capital_min=None, aberta_de=None, aberta_ate=None,
-                 apenas_matriz=False):
+                 apenas_matriz=False, natureza=None):
         self.cidades = [c.strip() for c in (cidades or []) if c and c.strip()]
         self.uf = (uf or "").strip().upper() or None
         self.bairro = (bairro or "").strip() or None
@@ -260,6 +260,9 @@ class Filtros:
         self.aberta_de = aberta_de
         self.aberta_ate = aberta_ate
         self.apenas_matriz = apenas_matriz
+        # So os digitos: a pessoa pode colar "2135" ou "213-5" e o codigo na
+        # base nao tem pontuacao.
+        self.natureza = "".join(c for c in str(natureza or "") if c.isdigit()) or None
 
 
 class ErroBusca(Exception):
@@ -329,6 +332,13 @@ def _montar_where(f, dir_dados, alias=None):
     if f.portes:
         cond.append(f"{p}porte_empresa IN (" + ",".join("?" for _ in f.portes) + ")")
         params.extend(f.portes)
+    if f.natureza:
+        # Prefixo, e nao trecho solto. O codigo tem 4 digitos e os dois
+        # primeiros dizem o grupo (20xx = entidades empresariais, 21xx =
+        # sociedades simples). Buscar "21" tem de trazer o grupo 21 inteiro e
+        # nao 1213, que apenas contem "21" no meio.
+        cond.append(f"{p}natureza_juridica LIKE ?")
+        params.append(f.natureza + "%")
     if f.capital_min is not None:
         cond.append(f"{p}capital_social >= ?")
         params.append(float(f.capital_min))

@@ -138,8 +138,11 @@ class FormFiltros:
         self.apenas_mei = args.get("apenas_mei") in ("1", "on", "true")
         self.apenas_matriz = args.get("apenas_matriz") in ("1", "on", "true")
         self.apenas_ativas = args.get("todas_situacoes") not in ("1", "on", "true")
-        porte = (args.get("porte") or "").strip()
-        self.portes = [porte] if porte else []
+        # getlist e nao get: o porte virou caixa de marcar, entao a mesma
+        # busca pode pedir micro E pequeno de uma vez. Filtros.portes ja era
+        # lista e ja virava IN (...) no SQL -- so a tela e que mandava um so.
+        self.portes = [v for v in args.getlist("porte") if v.strip()]
+        self.natureza = (args.get("natureza") or "").strip() or None
         self.capital_min = self._numero(args.get("capital_min"))
         self.aberta_de = (args.get("aberta_de") or "").strip() or None
         self.aberta_ate = (args.get("aberta_ate") or "").strip() or None
@@ -157,7 +160,7 @@ class FormFiltros:
         esta em uso -- senao o usuario nao ve por que a busca filtrou."""
         return bool(self.portes or self.capital_min or self.aberta_de
                     or self.aberta_ate or self.apenas_matriz
-                    or not self.apenas_ativas)
+                    or self.natureza or not self.apenas_ativas)
 
     @property
     def preenchido(self):
@@ -171,6 +174,7 @@ class FormFiltros:
             com_email=self.com_email, portes=self.portes,
             capital_min=self.capital_min, aberta_de=self.aberta_de,
             aberta_ate=self.aberta_ate, apenas_matriz=self.apenas_matriz,
+            natureza=self.natureza,
         )
 
     def query(self):
@@ -190,7 +194,9 @@ class FormFiltros:
         if not self.apenas_ativas:
             d["todas_situacoes"] = "1"
         if self.portes:
-            d["porte"] = self.portes[0]
+            d["porte"] = self.portes          # lista: vira porte=01&porte=03
+        if self.natureza:
+            d["natureza"] = self.natureza
         if self.capital_min is not None:
             d["capital_min"] = self.capital_min
         if self.aberta_de:

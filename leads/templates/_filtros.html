@@ -28,6 +28,24 @@
   com o resultado. Manter um unico formulario evita que um ganhe filtro novo
   e o outro fique atras.
 #}
+{#
+  Repete a busca da tela nos campos ocultos do formulario de export.
+
+  Trata lista separadamente porque "porte" virou caixa de marcar e pode vir
+  com mais de um valor. Sem este ramo, o Jinja escreveria a lista Python
+  inteira -- value="['01', '03']" -- e o export sairia com filtro de porte
+  nenhum, calado.
+#}
+{% macro campos_ocultos(query) %}
+  {%- for campo, valor in query.items() -%}
+    {%- if valor is not string and valor is iterable -%}
+      {%- for v in valor %}<input type="hidden" name="{{ campo }}" value="{{ v }}">{% endfor -%}
+    {%- else %}<input type="hidden" name="{{ campo }}" value="{{ valor }}">
+    {%- endif -%}
+  {%- endfor -%}
+{% endmacro %}
+
+
 {% macro formulario(acao, f, rotulo_botao) %}
 <form method="get" action="{{ acao }}"
       data-espera="Varrendo a base da Receita. Cidade grande pode levar alguns segundos.">
@@ -71,15 +89,35 @@
   <details class="mais" {% if f.tem_avancado %}open{% endif %}>
     <summary>Mais filtros</summary>
     <div>
+      {# Porte em linha propria: sao quatro opcoes lado a lado e dentro da
+         mesma linha dos outros campos elas ficariam espremidas numa coluna.
+
+         Caixas de marcar e nao lista suspensa: micro + pequeno na mesma busca
+         e o pedido mais comum, e com o select antigo isso dava duas buscas e
+         duas planilhas para juntar na mao depois. #}
+      {# A linha-form em volta nao e enfeite: o div do <details> e flex, entao
+         um .campo solto aqui vira irmao da linha de baixo e as duas dividem a
+         largura -- o porte terminava espremido em 226px de 1042. #}
+      <div class="linha-form" style="margin-bottom:14px">
+      <div class="campo">
+        <label>Porte</label>
+        <div class="checks" style="margin-top:2px">
+          {% for codigo, nome in [('01','Micro empresa'), ('03','Pequeno porte'),
+                                  ('05','Demais'), ('00','Nao informado')] %}
+            <label class="toggle">
+              <input type="checkbox" name="porte" value="{{ codigo }}"
+                {% if codigo in f.portes %}checked{% endif %}> {{ nome }}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+      </div>
       <div class="linha-form">
         <div class="campo medio">
-          <label>Porte</label>
-          <select name="porte">
-            <option value="">Qualquer</option>
-            <option value="01" {% if '01' in f.portes %}selected{% endif %}>Micro empresa</option>
-            <option value="03" {% if '03' in f.portes %}selected{% endif %}>Pequeno porte</option>
-            <option value="05" {% if '05' in f.portes %}selected{% endif %}>Demais</option>
-          </select>
+          <label>Natureza jurídica</label>
+          <input type="text" name="natureza" value="{{ f.natureza or '' }}"
+                 inputmode="numeric" placeholder="código, ex.: 2135">
+          <span class="dica">Código; 21 traz o grupo todo</span>
         </div>
         <div class="campo medio">
           <label>Capital mínimo</label>
