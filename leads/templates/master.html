@@ -51,6 +51,76 @@
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <button type="submit" class="secundario">Testar conexão</button>
   </form>
+
+  {# Envio unico, para provar o circuito inteiro antes de existir campanha:
+     sai daqui, chega no celular, e o status volta na lista abaixo. #}
+  <form method="post" action="{{ url_for('acesso.master_digisac_teste') }}"
+        data-espera="Mandando a mensagem de teste.">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h3 style="margin:22px 0 10px;font-size:15px">Enviar mensagem de teste</h3>
+    <div class="linha-form">
+      <div class="campo medio">
+        <label for="numero_teste">Número</label>
+        <input class="entrada" id="numero_teste" name="numero" inputmode="numeric"
+               placeholder="5518999999999">
+        <span class="dica">55 + DDD + número</span>
+      </div>
+      <div class="campo">
+        <label for="texto_teste">Mensagem</label>
+        <input class="entrada" id="texto_teste" name="texto"
+               placeholder="Teste da Maquina de Leads.">
+      </div>
+    </div>
+    <div class="acoes">
+      <button type="submit" class="secundario">Enviar teste</button>
+    </div>
+  </form>
+
+  {# Eventos crus do webhook. E instrumento de conferencia: prova que o
+     DigiSac esta chamando de volta, e mostra o formato exato do corpo --
+     que e o que falta para parar de adivinhar o mapeamento. #}
+  <h3 style="margin:24px 0 8px;font-size:15px">
+    Últimos eventos do webhook
+    {% if webhook_eventos %}
+      <span class="fantasia">({{ webhook_eventos|length }})</span>
+    {% endif %}
+  </h3>
+  {% if not webhook_eventos %}
+    <p class="dica">
+      Nada ainda. Assim que o DigiSac chamar a URL acima, os eventos aparecem
+      aqui. Se ficar vazio depois de um envio de teste, o webhook não está
+      chegando — confira a URL salva no painel deles.
+    </p>
+  {% else %}
+    <div class="tabela-rolagem">
+      <table>
+        <thead><tr><th>Quando</th><th>Entendido</th><th>Resumo</th><th>Corpo</th></tr></thead>
+        <tbody>
+        {% for e in webhook_eventos %}
+          <tr>
+            <td class="fantasia">{{ e.quando[11:19] }}</td>
+            <td>
+              <span class="pill {{ 'pill-sim' if e.entendido else 'pill-nao' }}">
+                {{ 'Sim' if e.entendido else 'Não' }}</span>
+            </td>
+            <td class="fantasia">{{ e.resumo or '—' }}</td>
+            <td>
+              <details>
+                <summary style="cursor:pointer;color:var(--texto-3)">ver</summary>
+                <pre style="white-space:pre-wrap;word-break:break-all;font-size:11.5px;
+                            margin:6px 0 0">{{ e.corpo }}</pre>
+              </details>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="dica" style="margin-top:10px">
+      "Entendido: Não" significa que o evento chegou mas o formato não bate
+      com o que o código espera — copie o corpo e me mande para eu ajustar.
+    </p>
+  {% endif %}
 </div>
 
 {% if senha_gerada %}

@@ -257,7 +257,11 @@ def webhook_digisac(segredo):
         abort(404)                  # 404 e nao 403: nao confirma que existe
 
     try:
-        ev = digisac.ler_evento(request.get_json(silent=True))
+        corpo = request.get_json(silent=True)
+        ev = digisac.ler_evento(corpo)
+        # Grava o cru ANTES de interpretar: se ler_evento errar o formato, o
+        # que chegou continua visivel no painel para corrigir o mapeamento.
+        campanha.registrar_bruto(corpo, ev)
         campanha.registrar_evento(ev)
     except Exception:
         # Falha aqui nao pode virar erro para o DigiSac: ele reenviaria o

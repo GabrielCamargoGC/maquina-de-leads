@@ -69,8 +69,64 @@ def criar_tabelas():
     con.execute("CREATE INDEX IF NOT EXISTS ix_envio_fila "
                 "ON envio (campanha_id, status)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_envio_msg ON envio (msg_id)")
+    # Ultimos eventos crus do webhook, para conferencia.
+    #
+    # O formato que o DigiSac manda nao esta publicado em lugar que de para
+    # ler sem login, entao ler_evento() procura cada campo em mais de um
+    # nome. Guardar o corpo como chegou e o que permite corrigir o
+    # mapeamento com o dado real na mao em vez de continuar adivinhando --
+    # e e a unica forma de a tela mostrar "chegou, mas nao entendi".
+    con.execute("""CREATE TABLE IF NOT EXISTS webhook_bruto (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        quando TEXT NOT NULL, corpo TEXT, entendido INTEGER DEFAULT 0,
+        resumo TEXT)""")
     con.commit()
     con.close()
+
+
+# Quantos eventos crus ficam guardados. E instrumento de conferencia, nao
+# historico: 50 cobrem um teste inteiro e nao deixam a tabela crescer sozinha.
+MAX_BRUTOS = 50
+
+
+def registrar_bruto(corpo, ev=None):
+    """Guarda o evento como chegou, e o que conseguimos entender dele."""
+    import json as _json
+    try:
+        texto = _json.dumps(corpo, ensure_ascii=False)[:4000]
+    except (TypeError, ValueError):
+        texto = str(corpo)[:4000]
+
+    entendido = bool(ev and (ev.get("estado") or ev.get("texto")))
+    resumo = ""
+    if ev:
+        partes = [ev.get("tipo") or "sem tipo"]
+        if ev.get("estado"):
+            partes.append("status=" + ev["estado"])
+        if ev.get("numero"):
+            partes.append(ev["numero"])
+        if ev.get("texto"):
+            partes.append('"' + ev["texto"][:40] + '"')
+        resumo = " · ".join(partes)
+
+    con = _con()
+    con.execute("INSERT INTO webhook_bruto (quando, corpo, entendido, resumo) "
+                "VALUES (?,?,?,?)",
+                (datetime.now().isoformat(timespec="seconds"), texto,
+                 1 if entendido else 0, resumo))
+    con.execute("DELETE FROM webhook_bruto WHERE id NOT IN "
+                "(SELECT id FROM webhook_bruto ORDER BY id DESC LIMIT ?)",
+                (MAX_BRUTOS,))
+    con.commit()
+    con.close()
+
+
+def listar_brutos(limite=20):
+    con = _con()
+    r = con.execute("SELECT * FROM webhook_bruto ORDER BY id DESC LIMIT ?",
+                    (limite,)).fetchall()
+    con.close()
+    return [dict(x) for x in r]
 
 
 # ------------------------------------------------------------ opt-out

@@ -19,8 +19,8 @@ from flask import (Blueprint, abort, redirect, render_template, request,
                    session, url_for)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import (atualizar_codigo, auditoria, busca, config, consolidar,
-               contas, digisac, estado, saude, tarefas)
+from . import (atualizar_codigo, auditoria, busca, campanha, config,
+               consolidar, contas, digisac, estado, saude, tarefas)
 
 bp = Blueprint("acesso", __name__)
 
@@ -389,6 +389,7 @@ def master():
         webhook_url=digisac.url_webhook(),
         digisac_ok=digisac.configurado(),
         digisac_teste=session.pop("digisac_teste", None),
+        webhook_eventos=campanha.listar_brutos(10),
     )
 
 
@@ -408,6 +409,45 @@ def master_digisac():
         usuario=(usuario_atual() or {}).get("usuario", ""), ip=_ip(),
         resultado="ok" if ok else "falha",
     )
+    return redirect(url_for("acesso.master"))
+
+
+@bp.route("/master/digisac/teste", methods=["POST"])
+@exigir_master
+def master_digisac_teste():
+    """Manda UMA mensagem para um numero escolhido.
+
+    E o teste de ponta a ponta: sai daqui, chega no celular, e o status de
+    volta aparece na lista de eventos logo abaixo. Se o circuito inteiro
+    funciona para um numero, funciona para cinco mil -- e descobrir isso com
+    um envio custa menos que descobrir com uma campanha.
+    """
+    conferir_csrf()
+    numero = "".join(c for c in (request.form.get("numero") or "") if c.isdigit())
+    texto = (request.form.get("texto") or "").strip()
+
+    if len(numero) < 12:
+        session["digisac_teste"] = {
+            "ok": False,
+            "mensagem": "Numero incompleto. Use o formato 5518999999999 "
+                        "(55 + DDD + numero).",
+        }
+        return redirect(url_for("acesso.master"))
+
+    try:
+        msg_id = digisac.enviar(numero, texto or "Teste da Maquina de Leads.")
+        session["digisac_teste"] = {
+            "ok": True,
+            "mensagem": f"Enviado para {numero}. Id da mensagem: {msg_id or '(sem id)'}. "
+                        f"O status deve aparecer nos eventos abaixo em segundos.",
+        }
+    except digisac.ErroDigiSac as e:
+        session["digisac_teste"] = {"ok": False, "mensagem": f"DigiSac recusou: {e}"}
+
+    auditoria.registrar(
+        auditoria.DIGISAC_TESTADO,
+        usuario=(usuario_atual() or {}).get("usuario", ""), ip=_ip(),
+        resultado="envio de teste", destino=numero)
     return redirect(url_for("acesso.master"))
 
 
