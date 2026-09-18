@@ -86,6 +86,61 @@ def testar():
         return False, str(e)
 
 
+# Onde a lista de conexoes pode estar. O produto chama de "conexao" na tela
+# e de "service" no corpo da mensagem, e a doc nao esta acessivel sem login,
+# entao tentamos os nomes plausiveis em ordem e ficamos com o primeiro que
+# responder. Descobrir isso na tela custa um clique; adivinhar custa uma
+# campanha inteira apontada para o numero errado.
+CAMINHOS_CONEXOES = ("/connections", "/services", "/connection", "/service")
+
+
+def listar_conexoes():
+    """[(id, nome, detalhe)] das conexoes da conta, ou levanta ErroDigiSac.
+
+    Serve para o painel mostrar de onde sai o disparo em vez de a pessoa ter
+    que garimpar o id na URL do painel deles.
+    """
+    if not (config.DIGISAC_SUBDOMINIO and config.DIGISAC_TOKEN):
+        raise ErroDigiSac("Preencha o subdominio e o token primeiro.",
+                          definitivo=True)
+
+    ultimo = None
+    for caminho in CAMINHOS_CONEXOES:
+        try:
+            r = _chamar(caminho + "?perPage=100", metodo="GET")
+        except ErroDigiSac as e:
+            ultimo = e
+            if e.codigo in (401, 403):
+                raise                 # token ruim: trocar de caminho nao ajuda
+            continue
+
+        itens = r if isinstance(r, list) else (
+            r.get("data") or r.get("items") or r.get("results") or [])
+        if not isinstance(itens, list):
+            continue
+
+        saida = []
+        for it in itens:
+            if not isinstance(it, dict):
+                continue
+            ident = it.get("id") or it.get("serviceId") or ""
+            if not ident:
+                continue
+            nome = (it.get("name") or it.get("label") or it.get("title")
+                    or it.get("description") or "(sem nome)")
+            partes = [str(it[k]) for k in ("type", "number", "phone", "status")
+                      if it.get(k)]
+            saida.append((str(ident), str(nome), " · ".join(partes)))
+        if saida:
+            return saida
+
+    raise ErroDigiSac(
+        "Nao consegui listar as conexoes. " +
+        (f"Ultima resposta: {ultimo}" if ultimo else
+         "Nenhum dos caminhos conhecidos respondeu com uma lista."),
+        definitivo=True)
+
+
 def enviar(numero, texto, arquivo=None):
     """Manda uma mensagem. Devolve o id dela no DigiSac.
 

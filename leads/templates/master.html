@@ -81,6 +81,7 @@
         <input class="entrada" id="dg_svc" name="service_id"
                value="{{ service_atual or '' }}" placeholder="id da conexão"
                autocomplete="off">
+        <span class="dica">é a conexão do WhatsApp que envia</span>
       </div>
       <div class="campo">
         <label for="dg_tok">Token</label>
@@ -99,11 +100,42 @@
     </div>
   </form>
 
-  <form method="post" action="{{ url_for('acesso.master_digisac') }}"
-        class="acoes" data-espera="Falando com o DigiSac.">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <button type="submit" class="secundario">Testar conexão</button>
-  </form>
+  <div class="acoes">
+    <form method="post" action="{{ url_for('acesso.master_digisac') }}"
+          data-espera="Falando com o DigiSac." style="display:inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit" class="secundario">Testar conexão</button>
+    </form>
+    {# Descobrir o Service ID sem garimpar na URL do painel deles. Precisa
+       apenas de subdominio e token -- justamente o que se tem antes de
+       saber qual e a conexao. #}
+    <form method="post" action="{{ url_for('acesso.master_digisac_conexoes') }}"
+          data-espera="Buscando as conexões da conta." style="display:inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit" class="secundario">Buscar conexões</button>
+    </form>
+  </div>
+
+  {% if conexoes %}
+    <h3 style="margin:20px 0 8px;font-size:15px">Conexões da conta</h3>
+    <p class="dica">
+      Copie o ID da conexão que vai disparar e cole no campo Service ID acima.
+    </p>
+    <div class="tabela-rolagem">
+      <table>
+        <thead><tr><th>Nome</th><th>Detalhe</th><th>Service ID</th></tr></thead>
+        <tbody>
+        {% for ident, nome, detalhe in conexoes %}
+          <tr>
+            <td>{{ nome }}</td>
+            <td class="fantasia">{{ detalhe or '—' }}</td>
+            <td><code>{{ ident }}</code>{{ ff.botao_copiar(ident, "Copiar ID") }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
 
   {# Envio unico, para provar o circuito inteiro antes de existir campanha:
      sai daqui, chega no celular, e o status volta na lista abaixo. #}

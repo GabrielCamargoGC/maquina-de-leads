@@ -398,6 +398,7 @@ def master():
         tem_service=bool(config.DIGISAC_SERVICE_ID),
         sub_atual=config.DIGISAC_SUBDOMINIO,
         service_atual=config.DIGISAC_SERVICE_ID,
+        conexoes=session.pop("digisac_conexoes", None),
     )
 
 
@@ -465,6 +466,20 @@ def master_digisac_salvar():
         auditoria.DIGISAC_TESTADO,
         usuario=(usuario_atual() or {}).get("usuario", ""), ip=_ip(),
         resultado="credenciais gravadas", campos=",".join(sorted(valores)))
+    return redirect(url_for("acesso.master"))
+
+
+@bp.route("/master/digisac/conexoes", methods=["POST"])
+@exigir_master
+def master_digisac_conexoes():
+    """Lista as conexoes da conta para a pessoa escolher o Service ID."""
+    conferir_csrf()
+    try:
+        session["digisac_conexoes"] = digisac.listar_conexoes()
+        session["digisac_teste"] = None
+    except digisac.ErroDigiSac as e:
+        session["digisac_conexoes"] = None
+        session["digisac_teste"] = {"ok": False, "mensagem": str(e)}
     return redirect(url_for("acesso.master"))
 
 
