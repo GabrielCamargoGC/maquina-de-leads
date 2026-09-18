@@ -20,7 +20,7 @@ from flask import (Blueprint, abort, redirect, render_template, request,
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import (atualizar_codigo, auditoria, busca, config, consolidar,
-               contas, estado, saude, tarefas)
+               contas, digisac, estado, saude, tarefas)
 
 bp = Blueprint("acesso", __name__)
 
@@ -28,6 +28,9 @@ bp = Blueprint("acesso", __name__)
 ROTAS_PUBLICAS = {
     "acesso.home", "acesso.entrar", "acesso.cadastrar", "acesso.recuperar",
     "static", "saude",
+    # O DigiSac nao tem como fazer login; quem autentica a chamada e o
+    # segredo no fim da URL, conferido dentro da propria rota.
+    "webhook_digisac",
 }
 
 CHAVE_SESSAO = "sessao"
@@ -381,7 +384,31 @@ def master():
         senha_gerada=session.pop("senha_gerada", None),
         codigos_gerados=session.pop("codigos_gerados", None),
         aviso=session.pop("aviso_master", None),
+        # Webhook e DigiSac: a URL sai daqui pronta para colar no painel
+        # deles, e o segredo nunca precisa passar por conversa nenhuma.
+        webhook_url=digisac.url_webhook(),
+        digisac_ok=digisac.configurado(),
+        digisac_teste=session.pop("digisac_teste", None),
     )
+
+
+@bp.route("/master/digisac", methods=["POST"])
+@exigir_master
+def master_digisac():
+    """Confere as credenciais do DigiSac de dentro do site.
+
+    Descobrir que o token esta errado no meio de uma campanha de horas custa
+    caro; um GET barato antes de comecar custa nada.
+    """
+    conferir_csrf()
+    ok, msg = digisac.testar()
+    session["digisac_teste"] = {"ok": ok, "mensagem": msg}
+    auditoria.registrar(
+        auditoria.DIGISAC_TESTADO,
+        usuario=(usuario_atual() or {}).get("usuario", ""), ip=_ip(),
+        resultado="ok" if ok else "falha",
+    )
+    return redirect(url_for("acesso.master"))
 
 
 @bp.route("/master/codigo", methods=["POST"])

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_filtros.html" as ff %}
 {% block titulo %}Master — Maquina de Leads{% endblock %}
 {% block cabecalho %}Painel master{% endblock %}
 {% block subtitulo %}Saude da maquina, contas e registro de eventos.{% endblock %}
@@ -12,6 +13,46 @@
 {# Senha temporaria e codigos aparecem UMA vez, logo apos gerar. Ficam na
    sessao so ate esta renderizacao -- recarregar a pagina nao os mostra de
    novo, porque credencial que fica na tela acaba em print no grupo. #}
+{# Cartao do DigiSac. A URL do webhook nasce aqui em vez de ser combinada
+   por conversa: o segredo dela e gerado no servidor e nunca precisa passar
+   por chat, e-mail ou bilhete. #}
+<div class="card">
+  <h2>Disparo de WhatsApp</h2>
+
+  {% if digisac_teste %}
+    <div class="alerta {{ 'alerta-ok' if digisac_teste.ok else 'alerta-erro' }}">
+      {{ digisac_teste.mensagem }}
+    </div>
+  {% endif %}
+
+  <div class="campo">
+    <label>URL do webhook</label>
+    <p class="dica" style="margin:0 0 6px">
+      Cole no painel do DigiSac, em Webhooks. Tipo "Por conexão", eventos
+      Mensagens (ao criar e ao alterar) e Conexões (ao alterar).
+    </p>
+    <p><code class="destaque">{{ webhook_url }}</code>
+       {{ ff.botao_copiar(webhook_url, "Copiar URL do webhook") }}</p>
+  </div>
+
+  <div class="alerta {{ 'alerta-ok' if digisac_ok else 'alerta-aviso' }}"
+       style="margin-top:14px">
+    {% if digisac_ok %}
+      Credenciais presentes no .env desta máquina.
+    {% else %}
+      Faltam <code>DIGISAC_SUBDOMINIO</code>, <code>DIGISAC_TOKEN</code> e
+      <code>DIGISAC_SERVICE_ID</code> no arquivo <code>.env</code> do
+      servidor. Sem eles o disparo fica desligado.
+    {% endif %}
+  </div>
+
+  <form method="post" action="{{ url_for('acesso.master_digisac') }}"
+        class="acoes" data-espera="Falando com o DigiSac.">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button type="submit" class="secundario">Testar conexão</button>
+  </form>
+</div>
+
 {% if senha_gerada %}
   <div class="card">
     <h2>Senha temporaria de {{ senha_gerada.usuario }}</h2>

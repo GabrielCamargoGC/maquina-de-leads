@@ -23,11 +23,13 @@ from pathlib import Path
 
 from urllib.parse import quote
 
-from flask import (Flask, Response, jsonify, redirect, render_template,
-                   request, send_file, url_for)
+import secrets
 
-from . import (acesso, auditoria, busca, config, consulta, estado,
-               exportar, novidades, refinar)
+from flask import (Flask, Response, abort, jsonify, redirect,
+                   render_template, request, send_file, url_for)
+
+from . import (acesso, auditoria, busca, campanha, config, consulta,
+               digisac, estado, exportar, novidades, refinar)
 
 app = Flask(__name__)
 
@@ -236,6 +238,32 @@ def _comum(pagina):
 # mes, e a resposta e identica entre uma troca e outra. A chave do cache e a
 # referencia da base, entao a troca mensal invalida sozinha.
 _cidades_cache = {}
+
+
+@app.route("/webhook/digisac/<segredo>", methods=["POST"])
+def webhook_digisac(segredo):
+    """Recebe evento do DigiSac: status de entrega e resposta de lead.
+
+    Rota publica -- o DigiSac nao faz login. Quem identifica a chamada e o
+    segredo no fim do caminho, gerado no servidor. Sem ele o endereco seria
+    adivinhavel e qualquer um postaria entrega falsa, ou fingiria ser um lead
+    pedindo descadastro para esvaziar a lista em silencio.
+
+    Responde 200 mesmo para evento que nao interessa: webhook que devolve
+    erro faz o DigiSac reenviar, e reenvio de algo que nunca vai servir so
+    bate no servidor durante a campanha.
+    """
+    if not secrets.compare_digest(segredo, digisac.segredo_webhook()):
+        abort(404)                  # 404 e nao 403: nao confirma que existe
+
+    try:
+        ev = digisac.ler_evento(request.get_json(silent=True))
+        campanha.registrar_evento(ev)
+    except Exception:
+        # Falha aqui nao pode virar erro para o DigiSac: ele reenviaria o
+        # mesmo evento em laco. Fica no log e a campanha segue.
+        traceback.print_exc()
+    return Response("ok", mimetype="text/plain")
 
 
 @app.route("/api/cidades")
@@ -565,6 +593,8 @@ def criar_app():
     config.garantir_pastas()
     exportar.iniciar_workers()
     exportar.iniciar_faxina()
+    # Retoma campanha que ficou pela metade quando o servico caiu.
+    campanha.iniciar_worker()
     return app
 
 

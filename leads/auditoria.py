@@ -39,6 +39,9 @@ EXPORTOU = "exportou"
 CODIGO_ATUALIZADO = "codigo_atualizado"
 INDICE_REFEITO = "indice_refeito"
 REFINOU = "refinou_planilha"
+DIGISAC_TESTADO = "digisac_testado"
+DISPAROU = "disparou_campanha"
+DISPARO_PAUSADO = "disparo_pausado"
 
 ROTULOS = {
     LOGIN_OK: "Entrou",
@@ -56,6 +59,9 @@ ROTULOS = {
     CODIGO_ATUALIZADO: "Codigo atualizado",
     INDICE_REFEITO: "Indice de consulta refeito",
     REFINOU: "Refinou planilha",
+    DIGISAC_TESTADO: "Testou conexao DigiSac",
+    DISPAROU: "Iniciou campanha de disparo",
+    DISPARO_PAUSADO: "Pausou campanha",
 }
 
 # Eventos que merecem destaque na tela do master.

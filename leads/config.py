@@ -65,6 +65,31 @@ MAX_LINHAS_TELA = 300
 EXPORTS_SIMULTANEOS = int(os.environ.get("LEADS_EXPORTS_SIMULTANEOS", "2"))
 
 
+# --- DigiSac (disparo de WhatsApp) ---
+#
+# Tudo por ambiente: token e credencial e nao entra em Git nem em codigo.
+# Vazio desliga o disparo -- a tela avisa em vez de quebrar.
+DIGISAC_SUBDOMINIO = os.environ.get("DIGISAC_SUBDOMINIO", "").strip()
+DIGISAC_TOKEN = os.environ.get("DIGISAC_TOKEN", "").strip()
+DIGISAC_SERVICE_ID = os.environ.get("DIGISAC_SERVICE_ID", "").strip()
+
+# Endereco publico do site, para montar a URL do webhook na tela do Master.
+SITE_URL = os.environ.get("LEADS_SITE_URL", "https://zebrahads.com.br").rstrip("/")
+
+# Ritmo do disparo. Os numeros sao os que a operacao ja usa no CRM: uma
+# mensagem a cada 3 a 6 segundos, com o intervalo sorteado dentro da faixa.
+#
+# O sorteio nao e enfeite: cadencia exata e assinatura de robo. E o teto de 6
+# nao pode subir muito -- a 4,5s medios, 5 mil numeros ja levam mais de 6
+# horas, e campanha que atravessa a madrugada chega em horario que irrita.
+DISPARO_PAUSA_MIN = float(os.environ.get("LEADS_DISPARO_PAUSA_MIN", "3"))
+DISPARO_PAUSA_MAX = float(os.environ.get("LEADS_DISPARO_PAUSA_MAX", "6"))
+
+# Teto por campanha. Trava de seguranca contra o erro de mandar para a
+# cidade inteira sem perceber.
+DISPARO_MAX_DESTINOS = int(os.environ.get("LEADS_DISPARO_MAX", "5000"))
+
+
 def garantir_pastas():
     for d in (DIR_DADOS, DIR_LOGS, DIR_EXPORTS, DIR_DOWNLOADS):
         d.mkdir(parents=True, exist_ok=True)
