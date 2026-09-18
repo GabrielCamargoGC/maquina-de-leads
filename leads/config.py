@@ -7,6 +7,61 @@ from pathlib import Path
 
 RAIZ = Path(os.environ.get("LEADS_RAIZ", Path(__file__).resolve().parent.parent))
 
+
+def carregar_env(caminho=None):
+    """Le o .env para dentro do ambiente do processo.
+
+    Ate aqui so o instalar.ps1 abria esse arquivo, e apenas para pegar o
+    token do tunel. Para o Python ele era decorativo: quem punha uma
+    credencial ali via os.environ.get devolver vazio e nao tinha como
+    descobrir por que -- o arquivo estava certo, so que ninguem lia.
+
+    Quem ja esta no ambiente de verdade GANHA do arquivo. E o que permite ao
+    servico, ou a um teste, sobrescrever um valor sem editar o disco.
+
+    Leitura tolerante de proposito: o arquivo e escrito a mao, direto no
+    servidor, muitas vezes por acesso remoto. Linha torta e ignorada em vez
+    de derrubar a importacao do modulo -- e a importacao deste modulo derruba
+    o site inteiro.
+    """
+    arquivo = Path(caminho) if caminho else RAIZ / ".env"
+    try:
+        if not arquivo.is_file():
+            return 0
+        bruto = arquivo.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return 0
+
+    postos = 0
+    for linha in bruto.splitlines():
+        linha = linha.strip()
+        if not linha or linha.startswith("#") or "=" not in linha:
+            continue
+        if linha.lower().startswith("export "):
+            linha = linha[7:].lstrip()
+        chave, _, valor = linha.partition("=")     # partition: valor pode ter '='
+        chave = chave.strip()
+        if not chave:
+            continue
+        valor = valor.strip()
+        if len(valor) >= 2 and valor[0] == valor[-1] and valor[0] in "\"'":
+            valor = valor[1:-1]
+        if chave not in os.environ:
+            os.environ[chave] = valor
+            postos += 1
+    return postos
+
+
+# Antes de qualquer os.environ.get abaixo -- senao o arquivo e lido depois de
+# as constantes ja terem pego o valor vazio.
+#
+# O resultado fica guardado para o painel do Master poder dizer se o arquivo
+# foi achado e quantas variaveis vieram dele. Sem isso, "faltam credenciais"
+# nao distingue "nao escrevi" de "escrevi no lugar errado" -- que foi
+# exatamente onde esta configuracao se perdeu da primeira vez.
+ARQUIVO_ENV = RAIZ / ".env"
+ENV_CARREGADAS = carregar_env()
+
 # Zips crus baixados da Receita. Por padrao aponta para o cache que ja existe.
 DIR_DOWNLOADS = Path(os.environ.get("LEADS_DOWNLOADS", RAIZ / "leads_cnpj" / "cache"))
 

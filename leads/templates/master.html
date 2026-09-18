@@ -35,15 +35,26 @@
        {{ ff.botao_copiar(webhook_url, "Copiar URL do webhook") }}</p>
   </div>
 
+  {# Diz onde o arquivo e procurado e se foi lido. "Faltam credenciais"
+     sozinho nao distingue "nao escrevi" de "escrevi no lugar errado". #}
   <div class="alerta {{ 'alerta-ok' if digisac_ok else 'alerta-aviso' }}"
        style="margin-top:14px">
     {% if digisac_ok %}
-      Credenciais presentes no .env desta máquina.
+      Credenciais carregadas.
     {% else %}
-      Faltam <code>DIGISAC_SUBDOMINIO</code>, <code>DIGISAC_TOKEN</code> e
-      <code>DIGISAC_SERVICE_ID</code> no arquivo <code>.env</code> do
-      servidor. Sem eles o disparo fica desligado.
+      Faltam <code>DIGISAC_SUBDOMINIO</code>, <code>DIGISAC_TOKEN</code> ou
+      <code>DIGISAC_SERVICE_ID</code>. Sem eles o disparo fica desligado.
     {% endif %}
+    <br>
+    <span class="fantasia">
+      Arquivo: <code>{{ env_arquivo }}</code> &middot;
+      {% if env_existe %}
+        encontrado, {{ env_carregadas }} variáve{{ 'l' if env_carregadas == 1 else 'is' }}
+        lida{{ '' if env_carregadas == 1 else 's' }}
+      {% else %}
+        <strong>não encontrado</strong> — crie o arquivo nesse caminho exato
+      {% endif %}
+    </span>
   </div>
 
   <form method="post" action="{{ url_for('acesso.master_digisac') }}"
