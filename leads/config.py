@@ -62,6 +62,68 @@ def carregar_env(caminho=None):
 ARQUIVO_ENV = RAIZ / ".env"
 ENV_CARREGADAS = carregar_env()
 
+
+def gravar_env(valores, caminho=None):
+    """Grava chaves no .env preservando o resto do arquivo.
+
+    Preservar nao e gentileza: o mesmo .env guarda o LEADS_TUNEL_TOKEN, e
+    reescrever o arquivo inteiro derrubaria o tunel da Cloudflare junto --
+    ou seja, o site sairia do ar para gravar uma credencial.
+
+    Chave que ja existe e trocada na propria linha, mantendo comentario e
+    ordem; chave nova vai para o fim. Valor None ou ausente nao mexe na
+    linha, que e o que permite trocar so o subdominio sem reenviar o token.
+
+    Aplica no processo tambem, para a mudanca valer sem reiniciar o servico.
+    """
+    arquivo = Path(caminho) if caminho else ARQUIVO_ENV
+    limpos = {k: v for k, v in (valores or {}).items() if v is not None}
+    if not limpos:
+        return 0
+
+    try:
+        linhas = arquivo.read_text(encoding="utf-8-sig",
+                                   errors="replace").splitlines()
+    except OSError:
+        linhas = []
+
+    restantes = dict(limpos)
+    saida = []
+    for linha in linhas:
+        nu = linha.strip()
+        chave = ""
+        if nu and not nu.startswith("#") and "=" in nu:
+            bruta = nu[7:].lstrip() if nu.lower().startswith("export ") else nu
+            chave = bruta.partition("=")[0].strip()
+        if chave and chave in restantes:
+            saida.append(f"{chave}={restantes.pop(chave)}")
+        else:
+            saida.append(linha)
+
+    if restantes:
+        if saida and saida[-1].strip():
+            saida.append("")
+        saida.append("# Disparo de WhatsApp (DigiSac)")
+        for k, v in restantes.items():
+            saida.append(f"{k}={v}")
+
+    arquivo.parent.mkdir(parents=True, exist_ok=True)
+    arquivo.write_text(chr(10).join(saida) + chr(10), encoding="utf-8")
+    try:
+        arquivo.chmod(0o600)
+    except OSError:
+        pass
+
+    # Vale ja, sem reiniciar. digisac.py le config.DIGISAC_* na hora da
+    # chamada, entao trocar o atributo do modulo basta.
+    import sys as _sys
+    eu = _sys.modules[__name__]
+    for k, v in limpos.items():
+        os.environ[k] = v
+        if hasattr(eu, k):
+            setattr(eu, k, v)
+    return len(limpos)
+
 # Zips crus baixados da Receita. Por padrao aponta para o cache que ja existe.
 DIR_DOWNLOADS = Path(os.environ.get("LEADS_DOWNLOADS", RAIZ / "leads_cnpj" / "cache"))
 

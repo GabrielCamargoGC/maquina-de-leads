@@ -393,6 +393,11 @@ def master():
         env_arquivo=str(config.ARQUIVO_ENV),
         env_existe=config.ARQUIVO_ENV.is_file(),
         env_carregadas=config.ENV_CARREGADAS,
+        tem_sub=bool(config.DIGISAC_SUBDOMINIO),
+        tem_token=bool(config.DIGISAC_TOKEN),
+        tem_service=bool(config.DIGISAC_SERVICE_ID),
+        sub_atual=config.DIGISAC_SUBDOMINIO,
+        service_atual=config.DIGISAC_SERVICE_ID,
     )
 
 
@@ -412,6 +417,54 @@ def master_digisac():
         usuario=(usuario_atual() or {}).get("usuario", ""), ip=_ip(),
         resultado="ok" if ok else "falha",
     )
+    return redirect(url_for("acesso.master"))
+
+
+@bp.route("/master/digisac/salvar", methods=["POST"])
+@exigir_master
+def master_digisac_salvar():
+    """Grava as credenciais do DigiSac no .env do servidor, pela web.
+
+    O .env mora na maquina e nao no Git, entao ate aqui configurar exigia
+    teclado no servidor -- que e justamente o que este painel existe para
+    evitar. O campo do token e so de escrita: o valor guardado nunca volta
+    para a tela, e deixar em branco mantem o que ja esta la, o que permite
+    corrigir o subdominio sem reenviar o token.
+    """
+    conferir_csrf()
+    valores = {}
+    for campo, chave in (("subdominio", "DIGISAC_SUBDOMINIO"),
+                         ("service_id", "DIGISAC_SERVICE_ID"),
+                         ("token", "DIGISAC_TOKEN")):
+        v = (request.form.get(campo) or "").strip()
+        if v:
+            valores[chave] = v
+
+    if not valores:
+        session["aviso_master"] = "Nada para salvar: todos os campos vieram vazios."
+        return redirect(url_for("acesso.master"))
+
+    try:
+        n = config.gravar_env(valores)
+    except OSError as e:
+        session["digisac_teste"] = {
+            "ok": False,
+            "mensagem": f"Nao consegui escrever em {config.ARQUIVO_ENV}: {e}",
+        }
+        return redirect(url_for("acesso.master"))
+
+    ok, msg = digisac.testar()
+    session["digisac_teste"] = {
+        "ok": ok,
+        "mensagem": (f"{n} credencial(is) gravada(s). " +
+                     ("Conexao testada: " + msg if ok
+                      else "Mas o teste falhou: " + msg)),
+    }
+    # O que mudou, nunca o valor.
+    auditoria.registrar(
+        auditoria.DIGISAC_TESTADO,
+        usuario=(usuario_atual() or {}).get("usuario", ""), ip=_ip(),
+        resultado="credenciais gravadas", campos=",".join(sorted(valores)))
     return redirect(url_for("acesso.master"))
 
 

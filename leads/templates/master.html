@@ -57,6 +57,48 @@
     </span>
   </div>
 
+  {# Credenciais pela web: o .env mora na maquina e nao no Git, entao sem
+     isto configurar exigia teclado no servidor -- que e justamente o que
+     este painel existe para evitar.
+
+     O campo do token e so de escrita. O valor guardado nunca volta para a
+     tela: credencial renderizada acaba em print, em cache de navegador e em
+     "ver codigo-fonte". Em branco, mantem o que ja esta la. #}
+  <form method="post" action="{{ url_for('acesso.master_digisac_salvar') }}"
+        data-espera="Gravando e testando.">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h3 style="margin:22px 0 10px;font-size:15px">Credenciais</h3>
+    <div class="linha-form">
+      <div class="campo medio">
+        <label for="dg_sub">Subdomínio</label>
+        <input class="entrada" id="dg_sub" name="subdominio"
+               value="{{ sub_atual or '' }}" placeholder="zebrahmkt"
+               autocomplete="off">
+        <span class="dica">antes de <code>.digisac.io</code></span>
+      </div>
+      <div class="campo medio">
+        <label for="dg_svc">Service ID</label>
+        <input class="entrada" id="dg_svc" name="service_id"
+               value="{{ service_atual or '' }}" placeholder="id da conexão"
+               autocomplete="off">
+      </div>
+      <div class="campo">
+        <label for="dg_tok">Token</label>
+        <input class="entrada" id="dg_tok" name="token" type="password"
+               autocomplete="new-password"
+               placeholder="{{ 'guardado — deixe em branco para manter' if tem_token
+                               else 'cole o token aqui' }}">
+        <span class="dica">
+          Gravado em <code>{{ env_arquivo }}</code>, fora do Git. Não volta
+          para a tela depois de salvo.
+        </span>
+      </div>
+    </div>
+    <div class="acoes">
+      <button type="submit" class="primario">Salvar e testar</button>
+    </div>
+  </form>
+
   <form method="post" action="{{ url_for('acesso.master_digisac') }}"
         class="acoes" data-espera="Falando com o DigiSac.">
     <input type="hidden" name="csrf" value="{{ csrf }}">
