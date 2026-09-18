@@ -86,6 +86,23 @@
       {% if f.apenas_mei %}checked{% endif %}> Só MEI</label>
   </div>
 
+  {# "Para disparo" nao filtra a busca -- muda a planilha.
+
+     A tela continua mostrando tudo que a consulta achou; o que muda e o que
+     sai no arquivo: so Nome e WhatsApp, so quem tem celular, sem numero
+     repetido. Fica separado dos outros filtros por isso: misturado entre
+     eles, seria lido como "so empresas de disparo", que nao existe. #}
+  <div class="checks caixa-disparo">
+    <label class="toggle">
+      <input type="checkbox" name="disparo" value="1"
+        {% if f.disparo %}checked{% endif %}> Planilha para disparo
+    </label>
+    <span class="dica">
+      Só Nome e WhatsApp, só quem tem celular, sem número repetido.
+      Desmarcado, a planilha sai completa com as 27 colunas.
+    </span>
+  </div>
+
   <details class="mais" {% if f.tem_avancado %}open{% endif %}>
     <summary>Mais filtros</summary>
     <div>

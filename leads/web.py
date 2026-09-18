@@ -143,6 +143,9 @@ class FormFiltros:
         # lista e ja virava IN (...) no SQL -- so a tela e que mandava um so.
         self.portes = [v for v in args.getlist("porte") if v.strip()]
         self.natureza = (args.get("natureza") or "").strip() or None
+        # Nao e filtro de busca: e formato de saida. A tela continua
+        # mostrando tudo; quem muda e a planilha.
+        self.disparo = args.get("disparo") in ("1", "on", "true")
         self.capital_min = self._numero(args.get("capital_min"))
         self.aberta_de = (args.get("aberta_de") or "").strip() or None
         self.aberta_ate = (args.get("aberta_ate") or "").strip() or None
@@ -197,6 +200,8 @@ class FormFiltros:
             d["porte"] = self.portes          # lista: vira porte=01&porte=03
         if self.natureza:
             d["natureza"] = self.natureza
+        if self.disparo:
+            d["disparo"] = "1"
         if self.capital_min is not None:
             d["capital_min"] = self.capital_min
         if self.aberta_de:
@@ -475,6 +480,7 @@ def pedir_export():
     f = FormFiltros(request.form)
     formato = request.form.get("formato", "csv")
     fonte = request.form.get("fonte", "busca")
+    modo = exportar.MODO_DISPARO if f.disparo else exportar.MODO_COMPLETO
     if not f.preenchido:
         return redirect(url_for("tela_busca"))
     try:
@@ -483,10 +489,11 @@ def pedir_export():
             usuario=(acesso.usuario_atual() or {}).get("usuario", ""),
             ip=acesso._ip(), filtros=f.descricao(), formato=formato, fonte=fonte,
         )
+        marca = "disparo" if f.disparo else ("novas" if fonte == "novidades" else "busca")
         job_id = exportar.enfileirar(
             f.para_busca(), formato=formato,
-            descricao=f"{f.descricao()} ({'novas' if fonte == 'novidades' else 'busca'})",
-            fonte=fonte,
+            descricao=f"{f.descricao()} ({marca})",
+            fonte=fonte, modo=modo,
         )
     except ValueError as e:
         return Response(str(e), status=400, mimetype="text/plain")

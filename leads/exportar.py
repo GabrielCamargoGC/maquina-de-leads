@@ -24,7 +24,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from . import busca, config, novidades
+from . import busca, config, novidades, telefone
 
 # Quanto tempo a planilha exportada fica no disco antes de sair.
 DIAS_GUARDAR = int(os.environ.get("LEADS_DIAS_EXPORT", "15"))
@@ -67,6 +67,22 @@ ROTULOS = {
 COLUNAS_EXPORT = list(ROTULOS)
 
 
+# Planilha enxuta, para alimentar disparo de WhatsApp.
+#
+# Duas colunas e nao 27 de proposito: essa planilha vai para uma ferramenta
+# de envio, nao para uma pessoa ler. CNPJ, endereco e capital social nao tem
+# uso nenhum la, e carregar dado de 5 mil empresas para fora do sistema sem
+# precisar e risco sem contrapartida.
+ROTULOS_DISPARO = {"nome": "Nome", "whatsapp": "WhatsApp"}
+
+# O que a busca precisa trazer para montar as duas colunas acima.
+COLUNAS_DISPARO = ["razao_social", "nome_fantasia",
+                   "ddd1", "telefone1", "ddd2", "telefone2"]
+
+MODO_COMPLETO = "completo"
+MODO_DISPARO = "disparo"
+
+
 def _valor(v):
     """Booleano vira Sim/Nao e data vira dd/mm/aaaa -- e planilha para
     pessoa ler, nao para maquina reprocessar."""
@@ -106,6 +122,13 @@ def criar_tabelas():
                erro TEXT
            )"""
     )
+    # O banco do servidor ja existe sem esta coluna. ALTER TABLE e a migracao
+    # mais simples que nao perde as linhas antigas; o try cobre o segundo
+    # start, quando a coluna ja esta la.
+    try:
+        con.execute("ALTER TABLE export_job ADD COLUMN modo TEXT DEFAULT 'completo'")
+    except sqlite3.OperationalError:
+        pass
     con.commit()
     con.close()
 
@@ -129,7 +152,10 @@ def listar_jobs(limite=20):
     con = _conectar_banco()
     con.row_factory = sqlite3.Row
     r = con.execute(
-        "SELECT * FROM export_job ORDER BY criado_em DESC LIMIT ?", (limite,)
+        # rowid desempata: criado_em tem precisao de segundo, e dois
+        # exports pedidos em seguida sairiam em ordem imprevisivel.
+        "SELECT * FROM export_job ORDER BY criado_em DESC, rowid DESC "
+        "LIMIT ?", (limite,)
     ).fetchall()
     con.close()
     return [dict(x) for x in r]
@@ -146,22 +172,54 @@ def _leitor(filtros, fonte, dir_dados):
     return busca.buscar_arrow(filtros, colunas=COLUNAS_EXPORT, dir_dados=dir_dados)
 
 
-def escrever_csv(filtros, destino, dir_dados=None, fonte="busca"):
+def _linhas_disparo(filtros, fonte, dir_dados):
+    """Gera (nome, numero) so de quem tem celular, sem repetir numero.
+
+    Deduplicar e obrigatorio, nao enfeite: matriz e filial da mesma empresa
+    costumam trazer o mesmo telefone, e sem isto a mesma pessoa recebe a
+    mesma mensagem duas vezes na mesma campanha -- que e exatamente o padrao
+    que faz o WhatsApp tratar o numero como spam.
+    """
+    if fonte == "novidades":
+        leitor = novidades.arrow_novas(filtros, COLUNAS_DISPARO, dir_atual=dir_dados)
+    else:
+        leitor = busca.buscar_arrow(filtros, colunas=COLUNAS_DISPARO,
+                                    dir_dados=dir_dados)
+    vistos = set()
+    for lote in leitor:
+        for l in lote.to_pylist():
+            numero = telefone.para_disparo_par(
+                l.get("ddd1"), l.get("telefone1"),
+                l.get("ddd2"), l.get("telefone2"))
+            if not numero or numero in vistos:
+                continue
+            vistos.add(numero)
+            yield telefone.nome_curto(l.get("razao_social"),
+                                      l.get("nome_fantasia")), numero
+
+
+def escrever_csv(filtros, destino, dir_dados=None, fonte="busca", modo=MODO_COMPLETO):
     """CSV com BOM e ';' -- e o que o Excel em portugues abre com as colunas
     separadas ao dar duplo clique. Sem isso tudo cai numa coluna so."""
     total = 0
-    leitor = _leitor(filtros, fonte, dir_dados)
     with open(destino, "w", newline="", encoding="utf-8-sig") as f:
         escritor = csv.writer(f, delimiter=";")
+        if modo == MODO_DISPARO:
+            escritor.writerow(ROTULOS_DISPARO.values())
+            for nome, numero in _linhas_disparo(filtros, fonte, dir_dados):
+                escritor.writerow([nome, numero])
+                total += 1
+            return total
         escritor.writerow(ROTULOS.values())
-        for lote in leitor:
+        for lote in _leitor(filtros, fonte, dir_dados):
             for linha in lote.to_pylist():
                 escritor.writerow([_valor(linha[c]) for c in COLUNAS_EXPORT])
                 total += 1
     return total
 
 
-def escrever_xlsx(filtros, destino, dir_dados=None, fonte="busca"):
+def escrever_xlsx(filtros, destino, dir_dados=None, fonte="busca",
+                  modo=MODO_COMPLETO):
     """Excel em modo constant_memory: o xlsxwriter grava linha a linha no
     disco em vez de segurar a planilha inteira na RAM."""
     import xlsxwriter
@@ -172,6 +230,25 @@ def escrever_xlsx(filtros, destino, dir_dados=None, fonte="busca"):
     )
     aba = livro.add_worksheet("Leads")
     negrito = livro.add_format({"bold": True, "bg_color": "#EEF1FD", "border": 1})
+
+    if modo == MODO_DISPARO:
+        # Numero como TEXTO, nunca numero. Em celula numerica o Excel come o
+        # zero a esquerda e passa 5518999741353 para notacao cientifica --
+        # e a planilha chega na ferramenta de disparo com "5,51899E+12".
+        texto = livro.add_format({"num_format": "@"})
+        for i, rotulo in enumerate(ROTULOS_DISPARO.values()):
+            aba.write(0, i, rotulo, negrito)
+        aba.freeze_panes(1, 0)
+        aba.set_column(0, 0, 40)
+        aba.set_column(1, 1, 18, texto)
+        linha_n = 1
+        for nome, numero in _linhas_disparo(filtros, fonte, dir_dados):
+            aba.write_string(linha_n, 0, nome)
+            aba.write_string(linha_n, 1, numero, texto)
+            linha_n += 1
+            total += 1
+        livro.close()
+        return total
 
     for i, rotulo in enumerate(ROTULOS.values()):
         aba.write(0, i, rotulo, negrito)
@@ -201,12 +278,12 @@ _trabalhadores = []
 _iniciado = threading.Lock()
 
 
-def _processar(job_id, filtros, formato, dir_dados, fonte):
+def _processar(job_id, filtros, formato, dir_dados, fonte, modo=MODO_COMPLETO):
     destino = config.DIR_EXPORTS / f"{job_id}.{formato}"
     try:
         _gravar("UPDATE export_job SET estado='rodando' WHERE id=?", (job_id,))
         escrever = escrever_xlsx if formato == "xlsx" else escrever_csv
-        total = escrever(filtros, destino, dir_dados, fonte)
+        total = escrever(filtros, destino, dir_dados, fonte, modo)
         _gravar(
             "UPDATE export_job SET estado='pronto', linhas=?, arquivo=?, concluido_em=? "
             "WHERE id=?",
@@ -292,24 +369,25 @@ def iniciar_faxina(dias=None):
         _faxina.append(t)
 
 
-def enfileirar(filtros, formato="csv", descricao="", dir_dados=None, fonte="busca"):
+def enfileirar(filtros, formato="csv", descricao="", dir_dados=None,
+               fonte="busca", modo=MODO_COMPLETO):
     iniciar_workers()
     if formato not in ("csv", "xlsx"):
         raise ValueError("formato deve ser csv ou xlsx")
     job_id = uuid.uuid4().hex[:12]
     _gravar(
-        "INSERT INTO export_job (id, criado_em, formato, descricao, filtros, estado) "
-        "VALUES (?,?,?,?,?, 'na_fila')",
+        "INSERT INTO export_job (id, criado_em, formato, descricao, filtros, "
+        "estado, modo) VALUES (?,?,?,?,?, 'na_fila', ?)",
         (
             job_id,
             datetime.now().isoformat(timespec="seconds"),
             formato,
             descricao,
             json.dumps(filtros.__dict__, default=str, ensure_ascii=False),
-
+            modo,
         ),
     )
-    _fila.put((job_id, filtros, formato, dir_dados, fonte))
+    _fila.put((job_id, filtros, formato, dir_dados, fonte, modo))
     return job_id
 
 

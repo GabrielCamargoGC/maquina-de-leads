@@ -830,3 +830,29 @@ td .copiar-mini { }
 @media (prefers-reduced-motion: reduce) {
   .cidades-caixa, .cidades-x { transition: none; }
 }
+
+/* ---------------------------------------------------------- disparo
+
+   A caixa "planilha para disparo" e diferente dos outros filtros: nao muda
+   quem a busca acha, muda o que sai no arquivo. A borda tracejada e a
+   legenda ao lado existem para nao ser lida como mais um filtro. */
+
+.caixa-disparo {
+  margin-top: 16px;
+  padding: 11px 14px;
+  border: 1px dashed var(--linha-forte);
+  border-radius: var(--raio-p);
+  background: var(--card-2);
+  align-items: baseline;
+  gap: 12px;
+}
+.caixa-disparo .dica { margin: 0; }
+
+/* Marcada, ganha a cor do sabre: a planilha que vai sair e outra, e isso
+   precisa ser visivel antes de clicar em Baixar. */
+.caixa-disparo:has(input:checked) {
+  border-color: var(--sabre-borda);
+  border-style: solid;
+  background: var(--sabre-fundo);
+}
+.caixa-disparo:has(input:checked) .dica { color: var(--sabre-texto); }
