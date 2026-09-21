@@ -182,6 +182,26 @@
     {% endif %}
   </div>
 
+  {# O Service ID aponta para a conexao certa?
+     Reconectar o numero no painel do DigiSac pode criar uma conexao NOVA,
+     com id novo. O .env continua na antiga, que ainda aceita POST /messages
+     e devolve 200 -- mas esta orfa e nunca despacha. Visto de fora e
+     identico a sucesso, e o painel deles mostra "Conectado" porque fala da
+     conexao nova. #}
+  {% if service_ok[0] is false %}
+    <div class="alerta alerta-erro" style="margin-top:14px">
+      <strong>Service ID:</strong> {{ service_ok[1] }}
+      <br>
+      Clique em <strong>Buscar conexões</strong> abaixo, copie o id da
+      conexão conectada e salve. Sem isso a mensagem é aceita e fica em
+      <code>ack 0</code> para sempre.
+    </div>
+  {% elif service_ok[0] is none %}
+    <div class="alerta alerta-aviso" style="margin-top:14px">
+      <strong>Service ID:</strong> {{ service_ok[1] }}.
+    </div>
+  {% endif %}
+
   {# Freios do disparo. Ficam aqui e nao na campanha porque sao propriedade
      do NUMERO: por campanha, a segunda comecaria a aquecer do zero de novo. #}
   <h3 style="margin:24px 0 10px;font-size:15px">Aquecimento e freios</h3>

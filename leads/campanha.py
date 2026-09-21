@@ -604,15 +604,6 @@ def registrar_evento(ev):
     if esperado and ev.get("service_id") and ev["service_id"] != esperado:
         return
 
-    # Resposta do lead. Dois destinos: o contador de respostas da campanha e,
-    # se for pedido de parada, o opt-out.
-    if not ev.get("minha") and ev.get("numero") and ev.get("texto"):
-        _anotar_resposta(ev["numero"], ev["texto"])
-        if digisac.pede_parada(ev["texto"]):
-            bloquear(ev["numero"], origem="resposta", texto=ev["texto"])
-            _pular_pendentes(ev["numero"])
-        return
-
     # Evento de conexao: o DigiSac avisa que o chip caiu, e isso chega antes
     # de o proximo envio falhar. Pausar aqui poupa os destinos que a fila
     # tentaria nesse meio tempo.
@@ -621,6 +612,25 @@ def registrar_evento(ev):
         return
 
     novo = _MAPA_STATUS.get(ev.get("estado", ""))
+
+    # Status ANTES de resposta, de proposito.
+    #
+    # Evento de status costuma trazer o texto da propria mensagem junto, e
+    # "minha" so fica verdadeiro se o payload usar isFromMe ou fromMe. Se
+    # esta conta nomear esse campo de outra forma, ou nao mandar nada em
+    # evento de status, a ordem invertida fazia o status da NOSSA mensagem
+    # cair no ramo de resposta: gravava resposta falsa com o nosso proprio
+    # texto e saia antes de atualizar o status -- campanha parada em
+    # "enviado" para sempre e taxa de resposta inventada.
+    #
+    # Evento que mapeia para um status conhecido nunca e resposta de lead.
+    if not novo and not ev.get("minha") and ev.get("numero") and ev.get("texto"):
+        _anotar_resposta(ev["numero"], ev["texto"])
+        if digisac.pede_parada(ev["texto"]):
+            bloquear(ev["numero"], origem="resposta", texto=ev["texto"])
+            _pular_pendentes(ev["numero"])
+        return
+
     if not novo:
         return
 
@@ -737,7 +747,6 @@ def _marcar(envio_id, status, msg_id="", erro=""):
 
 _erros_seguidos = {"n": 0}
 _conta_passos = {"n": 0}
-_parados_seguidos = {"n": 0}
 
 # Quantas mensagens seguidas podem ficar em ack 0 antes de pausar.
 #

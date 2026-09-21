@@ -393,6 +393,8 @@ def master():
         aquecimento=campanha.situacao_aquecimento(),
         conexao=digisac.estado_conexao() if digisac.configurado()
                 else (False, "nao configurado"),
+        service_ok=digisac.conferir_service_id() if digisac.configurado()
+                   else (False, "nao configurado"),
         env_arquivo=str(config.ARQUIVO_ENV),
         env_existe=config.ARQUIVO_ENV.is_file(),
         env_carregadas=config.contar_env(),

@@ -234,6 +234,47 @@ def listar_conexoes():
         definitivo=True)
 
 
+def conferir_service_id():
+    """(ok, detalhe) -- o Service ID configurado e a conexao que esta online?
+
+    Existe por causa de uma falha real: reconectar o numero no painel do
+    DigiSac pode criar uma conexao NOVA, com id novo. O .env continua
+    apontando para a antiga, que ainda existe e ainda aceita POST /messages
+    -- e devolve 200 com id de mensagem. Mas ela esta orfa, e a mensagem
+    nunca e despachada: fica em ack 0 para sempre.
+
+    Visto de fora isso e indistinguivel de sucesso, e o painel deles mostra
+    "Conectado" porque esta falando da conexao nova. Por isso a conferencia
+    compara o id configurado com a LISTA, em vez de so perguntar o estado
+    do id configurado.
+
+    ok None = nao deu para listar. Nesse caso nao se afirma nada.
+    """
+    if not configurado():
+        return False, "DigiSac nao configurado"
+
+    try:
+        conexoes = listar_conexoes()
+    except ErroDigiSac as e:
+        return None, f"nao consegui listar as conexoes ({e})"
+
+    atual = config.DIGISAC_SERVICE_ID
+    ids = [c[0] for c in conexoes]
+    if atual not in ids:
+        nomes = ", ".join(f"{c[1]} ({c[0]})" for c in conexoes[:4])
+        return False, (
+            f"o Service ID do .env ({atual}) NAO esta entre as conexoes da "
+            f"conta. Isso acontece quando a conexao e recriada ao reconectar: "
+            f"a antiga fica orfa, aceita a mensagem e nunca a entrega. "
+            f"Conexoes existentes: {nomes or '(nenhuma)'}")
+
+    # Esta na lista: confere se e a que esta de fato conectada.
+    conectado, detalhe = estado_conexao()
+    if conectado is False:
+        return False, f"o Service ID esta correto, mas {detalhe}"
+    return True, "o Service ID aponta para uma conexao existente"
+
+
 def enviar(numero, texto, arquivo=None):
     """Manda uma mensagem. Devolve o id dela no DigiSac.
 
