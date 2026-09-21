@@ -66,8 +66,16 @@ def criar_tabelas():
     # Indice em (campanha_id, status): a pergunta "qual o proximo da fila"
     # roda a cada envio, e sem ele vira varredura da tabela inteira quando a
     # campanha e grande.
+    # Resposta do lead. Colunas adicionadas depois, entao ALTER TABLE com
+    # try: o banco do servidor ja existe com envios gravados.
+    for coluna, tipo in (("respondeu_em", "TEXT"), ("resposta", "TEXT")):
+        try:
+            con.execute(f"ALTER TABLE envio ADD COLUMN {coluna} {tipo}")
+        except sqlite3.OperationalError:
+            pass
     con.execute("CREATE INDEX IF NOT EXISTS ix_envio_fila "
                 "ON envio (campanha_id, status)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_envio_numero ON envio (numero)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_envio_msg ON envio (msg_id)")
     # Ultimos eventos crus do webhook, para conferencia.
     #
@@ -359,6 +367,9 @@ def relatorio(ident):
 
     con = _con()
     try:
+        responderam = con.execute(
+            "SELECT count(*) AS n FROM envio WHERE campanha_id=? "
+            "AND respondeu_em IS NOT NULL", (ident,)).fetchone()["n"]
         motivos = con.execute(
             "SELECT coalesce(erro, '(sem detalhe)') AS motivo, count(*) AS n "
             "FROM envio WHERE campanha_id=? AND status=? "
@@ -382,6 +393,12 @@ def relatorio(ident):
         # palavras, senao vira "minhas mensagens nao foram entregues".
         "sem_confirmacao": enviado,
         "erro": erro,
+        # Resposta e o unico numero aqui que mede resultado, e nao entrega.
+        # Vai sobre quem recebeu, nao sobre quem foi enviado: cobrar resposta
+        # de mensagem que nao chegou nao mede nada.
+        "responderam": responderam,
+        "pct_responderam": (round(100 * responderam / (entregue + lido))
+                            if (entregue + lido) else 0),
         "pulado": pulado,
         "fila": fila,
         "pct_chegou": pct(entregue + lido),
@@ -430,8 +447,10 @@ def registrar_evento(ev):
     if esperado and ev.get("service_id") and ev["service_id"] != esperado:
         return
 
-    # Resposta do lead: pedido de parada vira opt-out na hora.
+    # Resposta do lead. Dois destinos: o contador de respostas da campanha e,
+    # se for pedido de parada, o opt-out.
     if not ev.get("minha") and ev.get("numero") and ev.get("texto"):
+        _anotar_resposta(ev["numero"], ev["texto"])
         if digisac.pede_parada(ev["texto"]):
             bloquear(ev["numero"], origem="resposta", texto=ev["texto"])
             _pular_pendentes(ev["numero"])
@@ -477,6 +496,45 @@ def registrar_evento(ev):
             con.commit()
     finally:
         con.close()
+
+
+def _anotar_resposta(numero, texto):
+    """Marca que este numero respondeu, no envio mais recente que saiu.
+
+    Guarda a PRIMEIRA resposta e nao sobrescreve: quem manda tres mensagens
+    seguidas respondeu uma vez, e o contador da campanha nao pode contar tres.
+    A primeira tambem e a que interessa ler -- e a reacao a mensagem.
+
+    Numero que nunca recebeu campanha nao acha envio e e ignorado: e alguem
+    falando com a empresa por conta propria, que nao e resultado de disparo.
+    """
+    con = _con()
+    try:
+        linha = con.execute(
+            "SELECT id FROM envio WHERE numero=? AND status<>? "
+            "AND respondeu_em IS NULL ORDER BY id DESC LIMIT 1",
+            (numero, NA_FILA)).fetchone()
+        if linha is None:
+            return
+        con.execute("UPDATE envio SET respondeu_em=?, resposta=? WHERE id=?",
+                    (datetime.now().isoformat(timespec="seconds"),
+                     (texto or "")[:400], linha["id"]))
+        con.commit()
+    finally:
+        con.close()
+
+
+def respostas(ident, limite=100):
+    """Quem respondeu naquela campanha, e o que disse."""
+    con = _con()
+    try:
+        r = con.execute(
+            "SELECT nome, numero, resposta, respondeu_em FROM envio "
+            "WHERE campanha_id=? AND respondeu_em IS NOT NULL "
+            "ORDER BY respondeu_em DESC LIMIT ?", (ident, limite)).fetchall()
+    finally:
+        con.close()
+    return [dict(x) for x in r]
 
 
 def _pular_pendentes(numero):

@@ -95,6 +95,16 @@
          quadros. Os tiques do WhatsApp dizem a mesma coisa sem explicacao. #}
       <div class="label">entregues, não lidas <span class="fantasia">✓✓</span></div>
     </div>
+    {# Resposta e o unico numero da tela que mede resultado, e nao entrega.
+       Fica junto dos outros porque e o que se olha primeiro depois de saber
+       que chegou. #}
+    <div>
+      <div class="num destaque">{{ rel.responderam|milhar }}</div>
+      <div class="label">
+        responderam{% if rel.chegou %} &middot; {{ rel.pct_responderam }}% de
+        quem recebeu{% endif %}
+      </div>
+    </div>
     <div>
       <div class="num">{{ rel.erro|milhar }}</div>
       <div class="label">com erro</div>
@@ -123,6 +133,38 @@
       que o DigiSac não nos avisou. Confira o webhook em
       <a href="/master">Master</a>, em "Últimos eventos do webhook". O envio em
       si não é afetado: veja no celular se a mensagem está lá.
+    </div>
+  {% endif %}
+
+  {% if respostas %}
+    {# A lista, e nao so o numero: resposta e a razao de a campanha existir,
+       e quem dispara precisa poder abrir o WhatsApp e continuar a conversa
+       sem procurar quem foi que falou. #}
+    <h3 style="margin:22px 0 8px;font-size:15px">
+      Respostas <span class="fantasia">({{ respostas|length }})</span>
+    </h3>
+    <div class="tabela-rolagem">
+      <table>
+        <thead><tr><th>Empresa</th><th>Número</th><th>Respondeu</th>
+                   <th>O que disse</th></tr></thead>
+        <tbody>
+        {% for r in respostas %}
+          <tr>
+            <td>{{ r.nome or '—' }}</td>
+            <td>
+              <a class="contato"
+                 href="https://wa.me/{{ r.numero }}" target="_blank"
+                 rel="noopener">{{ r.numero }}</a>
+              {{ ff.botao_copiar(r.numero) }}
+            </td>
+            <td class="fantasia">{{ r.respondeu_em[11:16] if r.respondeu_em }}
+              {{ r.respondeu_em[8:10] ~ '/' ~ r.respondeu_em[5:7]
+                 if r.respondeu_em }}</td>
+            <td>{{ r.resposta or '—' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
     </div>
   {% endif %}
 
