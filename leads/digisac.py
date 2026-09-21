@@ -70,7 +70,17 @@ def _chamar(caminho, corpo=None, metodo="POST"):
     try:
         with urllib.request.urlopen(req, timeout=TEMPO_LIMITE) as r:
             texto = r.read().decode("utf-8", "replace")
-            return json.loads(texto) if texto.strip() else {}
+            if not texto.strip():
+                return {}
+            try:
+                return json.loads(texto)
+            except json.JSONDecodeError:
+                # 2xx que nao e JSON e SUCESSO, nao falha. Acao como
+                # /restart responde texto simples ou vazio, e tratar isso
+                # como erro fazia o reinicio parecer que nao funcionou --
+                # quando tinha funcionado. O corpo vai no _bruto para quem
+                # precisar olhar.
+                return {"_bruto": texto[:500]}
     except urllib.error.HTTPError as e:
         bruto = e.read().decode("utf-8", "replace")
         try:
@@ -95,8 +105,7 @@ def _chamar(caminho, corpo=None, metodo="POST"):
         raise ErroDigiSac(str(msg), codigo=e.code, definitivo=definitivo)
     except urllib.error.URLError as e:
         raise ErroDigiSac(f"Sem resposta do DigiSac: {e.reason}", definitivo=False)
-    except json.JSONDecodeError:
-        raise ErroDigiSac("Resposta do DigiSac nao era JSON", definitivo=False)
+
 
 
 # Falhas que sao da CONEXAO, e nao do numero de destino.
@@ -542,10 +551,13 @@ def reiniciar_conexao():
     erros = []
     for metodo, caminho in tentativas:
         try:
-            _chamar(caminho, corpo={}, metodo=metodo)
-            return caminho
+            r = _chamar(caminho, corpo={}, metodo=metodo)
         except ErroDigiSac as e:
             erros.append(f"{caminho}: {e}")
+            continue
+        # Chegou aqui = 2xx. Resposta sem JSON tambem conta como aceita.
+        extra = (r or {}).get("_bruto") if isinstance(r, dict) else None
+        return caminho + (f" (respondeu: {extra[:80]})" if extra else "")
     raise ErroDigiSac(
         "nenhum caminho de reinicio respondeu nesta conta. Reinicie pelo "
         "painel do DigiSac (tres pontinhos na conexao). Tentei: "
