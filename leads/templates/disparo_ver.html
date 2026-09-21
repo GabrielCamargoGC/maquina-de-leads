@@ -57,34 +57,90 @@
     </div>
   {% endif %}
 
-  <div class="checks" style="margin-top:16px">
-    <span class="fantasia">enviados <strong>{{ cont.get('enviado', 0)|milhar }}</strong></span>
-    <span class="fantasia">entregues <strong>{{ cont.get('entregue', 0)|milhar }}</strong></span>
-    <span class="fantasia">lidos <strong>{{ cont.get('lido', 0)|milhar }}</strong></span>
-    <span class="fantasia">erros <strong>{{ cont.get('erro', 0)|milhar }}</strong></span>
-    {% if cont.get('pulado') %}
-      <span class="fantasia">pulados (opt-out)
-        <strong>{{ cont.get('pulado', 0)|milhar }}</strong></span>
-    {% endif %}
-    <span class="fantasia">na fila <strong>{{ restam|milhar }}</strong></span>
-  </div>
-
   {% if c.estado == 'rascunho' %}
     <div class="alerta alerta-aviso" style="margin-top:16px">
       Confira a mensagem abaixo antes de iniciar. Depois do primeiro envio não
       tem volta — dá para pausar, não para desfazer.
     </div>
   {% endif %}
+</div>
 
-  {% if cont.get('entregue', 0) == 0 and cont.get('enviado', 0) > 5 %}
-    <div class="alerta alerta-aviso" style="margin-top:16px">
-      {{ cont.get('enviado', 0)|milhar }} saíram e nenhum consta como entregue.
-      Ou o webhook não está chegando, ou o formato dele não bate — confira em
-      <a href="/master">Master</a>, em "Últimos eventos do webhook". O disparo
-      em si não é afetado.
+{% if rel.saiu or rel.erro or rel.pulado %}
+<div class="card">
+  <h2>Relatório</h2>
+
+  {# Os estados do banco viram as perguntas que se faz de verdade: chegou?
+     leu? deu erro em quantos e por que? #}
+  <div class="grade" style="margin-top:14px">
+    <div>
+      <div class="num">{{ rel.saiu|milhar }}</div>
+      <div class="label">saíram</div>
+    </div>
+    <div>
+      <div class="num">{{ rel.chegou|milhar }}</div>
+      <div class="label">
+        chegaram{% if rel.saiu %} &middot; {{ rel.pct_chegou }}%{% endif %}
+      </div>
+    </div>
+    <div>
+      <div class="num">{{ rel.lido|milhar }}</div>
+      <div class="label">
+        lidas{% if rel.saiu %} &middot; {{ rel.pct_lido }}%{% endif %}
+      </div>
+    </div>
+    <div>
+      <div class="num">{{ rel.nao_lido|milhar }}</div>
+      <div class="label">chegaram e não abriram</div>
+    </div>
+    <div>
+      <div class="num">{{ rel.erro|milhar }}</div>
+      <div class="label">com erro</div>
+    </div>
+    {% if rel.pulado %}
+    <div>
+      <div class="num">{{ rel.pulado|milhar }}</div>
+      <div class="label">pulados (opt-out)</div>
+    </div>
+    {% endif %}
+    {% if rel.fila %}
+    <div>
+      <div class="num">{{ rel.fila|milhar }}</div>
+      <div class="label">ainda na fila</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if rel.sem_confirmacao %}
+    {# "Sem confirmacao" NAO e "nao chegou". Precisa estar escrito assim, ou
+       a leitura natural e "minhas mensagens nao foram entregues" -- e no
+       WhatsApp do celular elas estao la, com dois tiques. #}
+    <div class="alerta alerta-aviso" style="margin-top:18px">
+      <strong>{{ rel.sem_confirmacao|milhar }} sem confirmação de entrega</strong>
+      ({{ rel.pct_sem }}%). Isso não quer dizer que não chegaram — quer dizer
+      que o DigiSac não nos avisou. Confira o webhook em
+      <a href="/master">Master</a>, em "Últimos eventos do webhook". O envio em
+      si não é afetado: veja no celular se a mensagem está lá.
+    </div>
+  {% endif %}
+
+  {% if rel.motivos %}
+    <h3 style="margin:22px 0 8px;font-size:15px">Por que deram erro</h3>
+    <div class="tabela-rolagem">
+      <table>
+        <thead><tr><th>Motivo</th><th style="text-align:right">Quantos</th></tr></thead>
+        <tbody>
+        {% for m in rel.motivos %}
+          <tr>
+            <td class="fantasia">{{ m.motivo }}</td>
+            <td style="text-align:right">{{ m.n|milhar }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
     </div>
   {% endif %}
 </div>
+{% endif %}
 
 <div class="card">
   <h2>Mensagem</h2>
@@ -99,7 +155,8 @@
   </div>
   <div class="tabela-rolagem">
     <table>
-      <thead><tr><th>Empresa</th><th>Número</th><th>Status</th><th>Detalhe</th></tr></thead>
+      <thead><tr><th>Empresa</th><th>Número</th><th>Status</th><th>Detalhe</th>
+                 <th>Id no DigiSac</th></tr></thead>
       <tbody>
       {% for e in envios %}
         <tr>
@@ -111,6 +168,9 @@
                                        else '') }}">{{ e.status }}</span>
           </td>
           <td class="fantasia">{{ e.erro or (e.quando[11:19] if e.quando else '') }}</td>
+          {# Vazio aqui significa que a resposta do envio nao trouxe o id --
+             e ai o status so anda pelo casamento por numero. #}
+          <td class="fantasia">{{ e.msg_id or '—' }}</td>
         </tr>
       {% endfor %}
       </tbody>

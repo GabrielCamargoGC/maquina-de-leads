@@ -569,6 +569,7 @@ def disparo_ver(ident):
     return render_template(
         "disparo_ver.html", **dict(
             _comum("disparo"), c=c, cont=cont,
+            rel=campanha.relatorio(ident),
             envios=campanha.envios(ident, 200),
             restam=restam,
             faltam=_minutos(campanha.tempo_estimado(restam)),

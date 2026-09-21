@@ -219,6 +219,34 @@ def url_webhook():
     return f"{config.SITE_URL}/webhook/digisac/{segredo_webhook()}"
 
 
+def _cavar(d, chaves, profundidade=4, so_texto=False):
+    """Procura a primeira das chaves em qualquer nivel do dicionario.
+
+    O payload do DigiSac nao esta publicado em lugar que de para ler sem
+    login, e o mesmo dado aparece em nivel diferente conforme o evento --
+    as vezes na raiz, as vezes em data, as vezes em data.message. Procurar
+    em largura cobre os tres sem ter que acertar o caminho de primeira.
+    """
+    if not isinstance(d, dict) or profundidade < 0:
+        return None
+    for k in chaves:
+        v = d.get(k)
+        if v in (None, "", {}, []):
+            continue
+        # so_texto evita o engano de "message": em alguns eventos e o texto
+        # da mensagem, em outros e o objeto inteiro dela. Sem o filtro, o
+        # dicionario virava texto e o pedido de parada nunca seria lido.
+        if so_texto and not isinstance(v, (str, int, float)):
+            continue
+        return v
+    for v in d.values():
+        if isinstance(v, dict):
+            achado = _cavar(v, chaves, profundidade - 1, so_texto)
+            if achado is not None:
+                return achado
+    return None
+
+
 def ler_evento(corpo):
     """Achata o payload do webhook no que interessa.
 
@@ -232,18 +260,16 @@ def ler_evento(corpo):
 
     tipo = (d.get("event") or d.get("type") or "").strip()
 
-    msg_id = dados.get("id") or dados.get("messageId") or ""
-    service_id = (dados.get("serviceId") or dados.get("service_id")
-                  or (dados.get("service") or {}).get("id") or "")
+    msg_id = _cavar(dados, ("id", "messageId", "message_id")) or ""
+    service_id = _cavar(dados, ("serviceId", "service_id")) or ""
+    if isinstance(service_id, dict):
+        service_id = service_id.get("id") or ""
 
     # "ack", "status" e "messageStatus" aparecem em integracoes diferentes do
     # mesmo produto; aceitar os tres evita depender de qual e o desta conta.
-    estado = (dados.get("ack") or dados.get("status")
-              or dados.get("messageStatus") or "")
+    estado = _cavar(dados, ("ack", "status", "messageStatus", "state")) or ""
 
-    contato = dados.get("contact") or {}
-    numero = (dados.get("number") or contato.get("number")
-              or contato.get("phone") or "")
+    numero = _cavar(dados, ("number", "phone", "from", "to")) or ""
 
     return {
         "tipo": tipo,
@@ -251,10 +277,11 @@ def ler_evento(corpo):
         "service_id": str(service_id or ""),
         "estado": str(estado or "").lower(),
         "numero": "".join(c for c in str(numero) if c.isdigit()),
-        "texto": str(dados.get("text") or ""),
+        "texto": str(_cavar(dados, ("text", "body", "message"),
+                             so_texto=True) or ""),
         # isFromMe distingue o que NOS mandamos do que o lead respondeu. Sem
         # isso, a propria mensagem da campanha seria lida como resposta.
-        "minha": bool(dados.get("isFromMe") or dados.get("fromMe")),
+        "minha": bool(_cavar(dados, ("isFromMe", "fromMe")) or False),
     }
 
 

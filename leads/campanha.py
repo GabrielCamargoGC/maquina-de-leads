@@ -335,6 +335,62 @@ def contagem(ident):
     return d
 
 
+def relatorio(ident):
+    """Numeros da campanha, do jeito que se le num relatorio.
+
+    contagem() devolve o estado cru de cada envio; aqui os estados viram as
+    perguntas que quem disparou faz de verdade: chegou? leu? deu erro em
+    quantos e por que?
+
+    'entregue' e 'lido' sao exclusivos no banco -- quem leu esta em 'lido' e
+    nao conta duas vezes. Entao "chegou" e a soma dos dois, e "nao lido" e so
+    o que ficou em 'entregue'.
+    """
+    c = ver(ident) or {}
+    d = contagem(ident)
+
+    entregue = d.get(ENTREGUE, 0)
+    lido = d.get(LIDO, 0)
+    enviado = d.get(ENVIADO, 0)
+    erro = d.get(ERRO, 0)
+    pulado = d.get(PULADO, 0)
+    fila = d.get(NA_FILA, 0)
+    saiu = enviado + entregue + lido
+
+    con = _con()
+    try:
+        motivos = con.execute(
+            "SELECT coalesce(erro, '(sem detalhe)') AS motivo, count(*) AS n "
+            "FROM envio WHERE campanha_id=? AND status=? "
+            "GROUP BY motivo ORDER BY n DESC LIMIT 8",
+            (ident, ERRO)).fetchall()
+    finally:
+        con.close()
+
+    def pct(n):
+        return round(100 * n / saiu) if saiu else 0
+
+    return {
+        "estado": c.get("estado", ""),
+        "total": d.get("total", 0),
+        "saiu": saiu,
+        "chegou": entregue + lido,
+        "lido": lido,
+        "nao_lido": entregue,
+        # Sem confirmacao nao e o mesmo que nao chegou: pode ter chegado e o
+        # webhook nao ter contado. A tela precisa dizer isso com essas
+        # palavras, senao vira "minhas mensagens nao foram entregues".
+        "sem_confirmacao": enviado,
+        "erro": erro,
+        "pulado": pulado,
+        "fila": fila,
+        "pct_chegou": pct(entregue + lido),
+        "pct_lido": pct(lido),
+        "pct_sem": pct(enviado),
+        "motivos": [dict(m) for m in motivos],
+    }
+
+
 def listar(limite=30):
     con = _con()
     r = con.execute("SELECT * FROM campanha ORDER BY criada_em DESC, rowid DESC "
@@ -382,20 +438,45 @@ def registrar_evento(ev):
         return
 
     novo = _MAPA_STATUS.get(ev.get("estado", ""))
-    if not novo or not ev.get("msg_id"):
+    if not novo:
         return
 
     con = _con()
-    # So avanca. O webhook nao garante ordem, e sem esta trava um 'sent'
-    # atrasado sobrescreveria um 'read' que ja tinha chegado.
-    ordem = {ENVIADO: 1, ENTREGUE: 2, LIDO: 3, ERRO: 1}
-    atual = con.execute("SELECT status FROM envio WHERE msg_id=?",
-                        (ev["msg_id"],)).fetchone()
-    if atual and ordem.get(novo, 0) > ordem.get(atual["status"], 0):
-        con.execute("UPDATE envio SET status=? WHERE msg_id=?",
-                    (novo, ev["msg_id"]))
-        con.commit()
-    con.close()
+    try:
+        # Acha o envio por id da mensagem; se nao der, pelo numero.
+        #
+        # O fallback nao e luxo: se a resposta do POST /messages nao trouxer
+        # o id no campo que esperamos, msg_id fica vazio em TODO envio e
+        # nenhum evento acha nada -- a campanha inteira fica parada em
+        # "enviado" com as mensagens entregues no celular das pessoas.
+        # Pelo numero sempre da, porque numero e o que nos mesmos mandamos.
+        linha = None
+        if ev.get("msg_id"):
+            linha = con.execute(
+                "SELECT id, status FROM envio WHERE msg_id=?",
+                (ev["msg_id"],)).fetchone()
+        if linha is None and ev.get("numero"):
+            linha = con.execute(
+                "SELECT id, status FROM envio WHERE numero=? AND status<>? "
+                "ORDER BY id DESC LIMIT 1", (ev["numero"], NA_FILA)).fetchone()
+        if linha is None:
+            return
+
+        # So avanca. O webhook nao garante ordem, e sem esta trava um 'sent'
+        # atrasado sobrescreveria um 'read' que ja tinha chegado.
+        ordem = {ENVIADO: 1, ENTREGUE: 2, LIDO: 3, ERRO: 1}
+        if ordem.get(novo, 0) > ordem.get(linha["status"], 0):
+            # Grava o msg_id quando ele chega pelo evento e faltava no envio:
+            # do segundo evento em diante o casamento volta a ser exato.
+            if ev.get("msg_id"):
+                con.execute("UPDATE envio SET status=?, msg_id=? WHERE id=?",
+                            (novo, ev["msg_id"], linha["id"]))
+            else:
+                con.execute("UPDATE envio SET status=? WHERE id=?",
+                            (novo, linha["id"]))
+            con.commit()
+    finally:
+        con.close()
 
 
 def _pular_pendentes(numero):
