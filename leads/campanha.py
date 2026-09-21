@@ -868,7 +868,11 @@ def _passo():
     # fila que nao anda e a tela mostra "enviado" para mensagem que nunca
     # saiu. Uma vez a cada 20 envios: perguntar a cada envio dobraria as
     # chamadas a API sem ganho.
-    if _conta_passos["n"] % 20 == 0:
+    # So pergunta se ha credencial: sem ela estado_conexao devolve "nao
+    # configurado", que viraria um recado de "a conexao caiu, leia o QR" --
+    # mandando a pessoa ao painel do DigiSac quando o que falta e o token.
+    # Sem credencial, digisac.enviar ja falha com a mensagem certa.
+    if digisac.configurado() and _conta_passos["n"] % 20 == 0:
         conectado, detalhe = digisac.estado_conexao()
         if conectado is False:
             pausar_por_queda(item["camp"], detalhe)
