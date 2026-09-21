@@ -289,6 +289,35 @@ def ver_mensagem(msg_id):
         definitivo=True)
 
 
+# Niveis de confirmacao do WhatsApp, como o DigiSac devolve em "ack".
+#
+#   -1  erro
+#    0  pendente -- aceita pelo DigiSac e NAO despachada
+#    1  chegou no servidor do WhatsApp (um tique)
+#    2  entregue no aparelho (dois tiques)
+#    3  lida (dois tiques azuis)
+ACK_ERRO, ACK_PENDENTE, ACK_SERVIDOR = -1, 0, 1
+
+
+def ack_da_mensagem(msg_id):
+    """ack de uma mensagem, ou None se nao der para saber.
+
+    E o unico jeito de distinguir "o DigiSac aceitou" de "o WhatsApp
+    recebeu". O POST /messages devolve 200 nos dois casos.
+    """
+    try:
+        dados = ver_mensagem(msg_id)
+    except ErroDigiSac:
+        return None
+    bruto = _cavar(dados, ("ack",)) if isinstance(dados, dict) else None
+    if bruto is None:
+        return None
+    try:
+        return int(bruto)
+    except (TypeError, ValueError):
+        return None
+
+
 def resumir_mensagem(dados):
     """Reduz a resposta de ver_mensagem ao que interessa, sem depender de
     saber o formato exato: procura os campos plausiveis e devolve o resto

@@ -737,6 +737,60 @@ def _marcar(envio_id, status, msg_id="", erro=""):
 
 _erros_seguidos = {"n": 0}
 _conta_passos = {"n": 0}
+_parados_seguidos = {"n": 0}
+
+# Quantas mensagens seguidas podem ficar em ack 0 antes de pausar.
+#
+# 3 e nao 1 porque ack 0 e normal no instante seguinte ao envio -- a
+# mensagem acabou de ser aceita e ainda nao foi despachada. Tres seguidas,
+# consultadas depois de outros envios terem acontecido, ja nao e atraso.
+MAX_PARADAS = 3
+
+
+def _conferir_despacho(camp_id):
+    """Pausa se o DigiSac esta aceitando e nao despachando.
+
+    O POST /messages devolve 200 e um id mesmo quando a mensagem fica parada
+    na fila do DigiSac -- do nosso lado isso e indistinguivel de sucesso, e
+    uma campanha inteira vai para uma fila morta enquanto a tela diz
+    "enviado". Foi o que aconteceu: 25 aceitas, 1 despachada.
+
+    Confere o ack de mensagens que ja sairam ha alguns envios. ack 0 nelas
+    significa que nao e atraso: e a fila do DigiSac travada.
+    """
+    if not digisac.configurado():
+        return False
+
+    con = _con()
+    try:
+        # Pula a mais recente: ack 0 nela e so o envio ainda fresco.
+        linhas = con.execute(
+            "SELECT msg_id FROM envio WHERE campanha_id=? AND status=? "
+            "AND msg_id IS NOT NULL AND msg_id<>'' "
+            "ORDER BY id DESC LIMIT 4", (camp_id, ENVIADO)).fetchall()
+    finally:
+        con.close()
+
+    candidatas = [r["msg_id"] for r in linhas][1:]
+    if len(candidatas) < MAX_PARADAS:
+        return False
+
+    acks = [digisac.ack_da_mensagem(m) for m in candidatas[:MAX_PARADAS]]
+    if any(a is None for a in acks):
+        return False                 # nao deu para ler: nao acusa sem prova
+    if all(a == digisac.ACK_PENDENTE for a in acks):
+        _mudar_estado(
+            camp_id, PAUSADA,
+            erro="Pausada sozinha: o DigiSac esta aceitando as mensagens e "
+                 "nao entregando ao WhatsApp (ack 0 nas ultimas "
+                 f"{MAX_PARADAS}). A conexao pode estar so aparentemente "
+                 "ativa. Reconecte o numero no DigiSac e, se persistir, "
+                 "mostre isto ao suporte deles -- o envio saiu daqui e "
+                 "travou la.")
+        auditoria.registrar(auditoria.DISPARO_PAUSADO, usuario="automatico",
+                            campanha=camp_id, motivo="ack 0 em sequencia")
+        return True
+    return False
 
 
 def _contar_erro(camp_id, usuario=""):
@@ -888,6 +942,11 @@ def _passo():
         msg_id = digisac.enviar(item["numero"], texto)
         _marcar(item["id"], ENVIADO, msg_id=msg_id or "")
         _erros_seguidos["n"] = 0          # deu certo: zera o freio
+
+        # A cada 5 envios, confere se o DigiSac esta despachando de verdade.
+        # 200 na API nao prova entrega -- prova apenas que ele aceitou.
+        if _conta_passos["n"] % 5 == 4 and _conferir_despacho(item["camp"]):
+            return False
     except digisac.ErroDigiSac as e:
         if digisac.e_queda_de_conexao(str(e)):
             # Chip caiu do WhatsApp. Pausa JA, sem esperar o freio de 10:
