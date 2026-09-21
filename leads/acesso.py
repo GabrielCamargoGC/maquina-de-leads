@@ -392,7 +392,7 @@ def master():
         webhook_eventos=campanha.listar_brutos(10),
         env_arquivo=str(config.ARQUIVO_ENV),
         env_existe=config.ARQUIVO_ENV.is_file(),
-        env_carregadas=config.ENV_CARREGADAS,
+        env_carregadas=config.contar_env(),
         tem_sub=bool(config.DIGISAC_SUBDOMINIO),
         tem_token=bool(config.DIGISAC_TOKEN),
         tem_service=bool(config.DIGISAC_SERVICE_ID),

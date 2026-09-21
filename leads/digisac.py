@@ -44,6 +44,18 @@ def _base():
     return f"https://{config.DIGISAC_SUBDOMINIO}.digisac.io/api/v1"
 
 
+# O DigiSac fica atras do Cloudflare, e o Cloudflare recusa a assinatura
+# padrao do urllib com "error code: 1010" -- banimento por assinatura de
+# navegador. A requisicao nem chega no DigiSac: token certo dava o mesmo erro,
+# e a mensagem manda procurar no lugar errado.
+#
+# Um User-Agent de cliente de verdade resolve. Nao e disfarce para burlar
+# limite: e identificar-se como um cliente HTTP comum em vez de ficar com o
+# rotulo generico da biblioteca, que a protecao anti-bot trata como robo de
+# varredura.
+CABECALHO_AGENTE = "MaquinaDeLeads/1.0 (+https://zebrahads.com.br)"
+
+
 def _chamar(caminho, corpo=None, metodo="POST"):
     dados = json.dumps(corpo).encode("utf-8") if corpo is not None else None
     req = urllib.request.Request(
@@ -51,6 +63,8 @@ def _chamar(caminho, corpo=None, metodo="POST"):
         headers={
             "Authorization": f"Bearer {config.DIGISAC_TOKEN}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": CABECALHO_AGENTE,
         },
     )
     try:
@@ -65,6 +79,13 @@ def _chamar(caminho, corpo=None, metodo="POST"):
                    or bruto[:300])
         except ValueError:
             msg = bruto[:300] or f"HTTP {e.code}"
+
+        # 1010 e do Cloudflare, nao do DigiSac: a requisicao foi barrada
+        # antes de chegar la. Sem dizer isso, o erro manda conferir token.
+        if "1010" in str(msg):
+            msg = ("Bloqueado pelo Cloudflare na frente do DigiSac "
+                   "(error code: 1010) -- a requisicao nao chegou na API "
+                   "deles. Nao e problema de token.")
         # 4xx e erro nosso (numero, token, payload): repetir da o mesmo.
         # 5xx e do lado deles e costuma passar.
         raise ErroDigiSac(str(msg), codigo=e.code, definitivo=400 <= e.code < 500)

@@ -63,6 +63,27 @@ ARQUIVO_ENV = RAIZ / ".env"
 ENV_CARREGADAS = carregar_env()
 
 
+def contar_env(caminho=None):
+    """Quantas chaves o .env tem AGORA.
+
+    ENV_CARREGADAS e uma foto da partida: conta quantas variaveis o arquivo
+    tinha quando o modulo foi importado. Gravar credencial pelo painel muda o
+    arquivo mas nao aquele numero, e a tela passava a mentir -- dizia "1
+    variavel lida" com quatro no disco.
+    """
+    arquivo = Path(caminho) if caminho else ARQUIVO_ENV
+    try:
+        bruto = arquivo.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return 0
+    n = 0
+    for linha in bruto.splitlines():
+        linha = linha.strip()
+        if linha and not linha.startswith("#") and "=" in linha:
+            n += 1
+    return n
+
+
 def gravar_env(valores, caminho=None):
     """Grava chaves no .env preservando o resto do arquivo.
 
