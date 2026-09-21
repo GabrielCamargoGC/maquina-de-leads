@@ -220,6 +220,60 @@
     </div>
   {% endif %}
 
+  {# Botao de diagnostico: pergunta ao DigiSac o que ele fez com as
+     mensagens que ele mesmo aceitou. "Aceitou" e "entregou" sao coisas
+     diferentes la, e do nosso lado as duas parecem sucesso. #}
+  {% if rel.sem_confirmacao %}
+    <form method="post" action="{{ url_for('disparo_conferir', ident=c.id) }}"
+          class="acoes" data-espera="Perguntando ao DigiSac.">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit" class="secundario">
+        Conferir no DigiSac o que aconteceu
+      </button>
+    </form>
+    <p class="dica">
+      Consulta 5 mensagens marcadas como enviadas e mostra o que o DigiSac
+      responde sobre cada uma. Se ele disser "pendente", o problema está do
+      lado dele — e essa resposta é o que se leva para o suporte.
+    </p>
+  {% endif %}
+
+  {% if conferencia %}
+    <h3 style="margin:22px 0 8px;font-size:15px">O que o DigiSac respondeu</h3>
+    {% if conferencia.erro %}
+      <div class="alerta alerta-erro">{{ conferencia.erro }}</div>
+    {% endif %}
+    {% if not conferencia.achados %}
+      <p class="dica">
+        Nenhuma mensagem com id para consultar. Se a coluna "Id no DigiSac"
+        estiver vazia, a resposta do envio não trouxe o id.
+      </p>
+    {% else %}
+      <div class="tabela-rolagem">
+        <table>
+          <thead><tr><th>Empresa</th><th>Status no DigiSac</th>
+                     <th>Erro</th><th>Resposta crua</th></tr></thead>
+          <tbody>
+          {% for a in conferencia.achados %}
+            <tr>
+              <td>{{ a.nome or a.numero }}</td>
+              <td><span class="pill">{{ a.status if a.status is not none else '—' }}</span></td>
+              <td class="fantasia">{{ a.erro or '—' }}</td>
+              <td>
+                <details>
+                  <summary style="cursor:pointer;color:var(--texto-3)">ver</summary>
+                  <pre style="white-space:pre-wrap;word-break:break-all;
+                              font-size:11.5px;margin:6px 0 0">{{ a.bruto }}</pre>
+                </details>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  {% endif %}
+
   {% if rel.motivos %}
     <h3 style="margin:22px 0 8px;font-size:15px">Por que deram erro</h3>
     <div class="tabela-rolagem">

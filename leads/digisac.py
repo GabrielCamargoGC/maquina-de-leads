@@ -258,6 +258,54 @@ def enviar(numero, texto, arquivo=None):
     return r.get("id") or (r.get("data") or {}).get("id") or ""
 
 
+def ver_mensagem(msg_id):
+    """Pergunta ao DigiSac o que ele fez com uma mensagem que ele aceitou.
+
+    Existe porque "aceitou" e "entregou" sao coisas diferentes no DigiSac: o
+    POST /messages devolve 200 e um id, e a mensagem pode ficar parada na
+    fila dele sem nunca ir para o WhatsApp. Do nosso lado isso e
+    indistinguivel de sucesso.
+
+    Este e o unico jeito de saber de que lado esta o problema sem abrir
+    ticket no suporte deles: se ele responde que a mensagem esta pendente ou
+    com erro, o envio saiu daqui e travou la.
+    """
+    if not configurado():
+        raise ErroDigiSac("DigiSac nao configurado", definitivo=True)
+    if not msg_id:
+        raise ErroDigiSac("Sem id de mensagem para consultar", definitivo=True)
+
+    ultimo = None
+    for caminho in (f"/messages/{msg_id}", f"/message/{msg_id}"):
+        try:
+            r = _chamar(caminho, metodo="GET")
+        except ErroDigiSac as e:
+            ultimo = e
+            continue
+        if isinstance(r, dict):
+            return r.get("data") if isinstance(r.get("data"), dict) else r
+    raise ErroDigiSac(
+        f"Nao consegui consultar a mensagem. {ultimo or ''}".strip(),
+        definitivo=True)
+
+
+def resumir_mensagem(dados):
+    """Reduz a resposta de ver_mensagem ao que interessa, sem depender de
+    saber o formato exato: procura os campos plausiveis e devolve o resto
+    como JSON para leitura humana."""
+    if not isinstance(dados, dict):
+        return {"bruto": str(dados)[:2000]}
+    return {
+        "id": _cavar(dados, ("id",)) or "",
+        "status": _cavar(dados, ("status", "ack", "messageStatus", "state")),
+        "erro": _cavar(dados, ("error", "errorMessage", "failReason",
+                               "statusMessage"), so_texto=True),
+        "enviada_em": _cavar(dados, ("sentAt", "sent_at", "timestamp",
+                                     "createdAt"), so_texto=True),
+        "bruto": json.dumps(dados, ensure_ascii=False)[:2000],
+    }
+
+
 # ------------------------------------------------------------ webhook
 
 

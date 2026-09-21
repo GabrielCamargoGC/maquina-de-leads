@@ -26,7 +26,8 @@ from urllib.parse import quote
 import secrets
 
 from flask import (Flask, Response, abort, jsonify, redirect,
-                   render_template, request, send_file, url_for)
+                   render_template, request, send_file, session,
+                   url_for)
 
 from . import (acesso, auditoria, busca, campanha, config, consulta,
                digisac, estado, exportar, novidades, refinar)
@@ -581,6 +582,7 @@ def disparo_ver(ident):
             _comum("disparo"), c=c, cont=cont,
             rel=campanha.relatorio(ident),
             erros_de_conexao=campanha.contar_erros_de_conexao(ident),
+            conferencia=session.pop("conferencia", None),
             aquecimento=campanha.situacao_aquecimento(),
             respostas=campanha.respostas(ident, 100),
             envios=campanha.envios(ident, 200),
@@ -607,6 +609,42 @@ def disparo_acao(ident):
         # antes de comecar, e nao no meio de mil envios.
         return render_template("erro.html", codigo=400, nome="Nao deu para iniciar",
                                mensagem=str(e), **_comum("disparo")), 400
+    return redirect(url_for("disparo_ver", ident=ident))
+
+
+@app.route("/disparo/<ident>/conferir", methods=["POST"])
+def disparo_conferir(ident):
+    """Pergunta ao DigiSac o que ele fez com as mensagens que aceitou.
+
+    Diagnostico, nao rotina: serve para descobrir de que lado esta o
+    problema quando a campanha mostra tudo como enviado e nada chega. Se o
+    DigiSac responder que a mensagem esta pendente, o envio saiu daqui e
+    travou la -- e isso e o que se leva para o suporte deles.
+    """
+    acesso.conferir_csrf()
+    if not campanha.ver(ident):
+        return redirect(url_for("tela_disparo"))
+
+    achados, erro = [], None
+    try:
+        for e in campanha.envios(ident, 400):
+            if e["status"] != campanha.ENVIADO or not e.get("msg_id"):
+                continue
+            try:
+                achados.append(dict(
+                    digisac.resumir_mensagem(digisac.ver_mensagem(e["msg_id"])),
+                    numero=e["numero"], nome=e["nome"]))
+            except digisac.ErroDigiSac as ex:
+                achados.append({"numero": e["numero"], "nome": e["nome"],
+                                "id": e["msg_id"], "status": None,
+                                "erro": str(ex), "bruto": ""})
+            if len(achados) >= 5:      # amostra basta para o diagnostico
+                break
+    except Exception as ex:
+        traceback.print_exc()
+        erro = str(ex)
+
+    session["conferencia"] = {"achados": achados, "erro": erro}
     return redirect(url_for("disparo_ver", ident=ident))
 
 
