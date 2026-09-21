@@ -43,6 +43,7 @@ DIGISAC_TESTADO = "digisac_testado"
 DISPAROU = "disparou_campanha"
 DISPARO_PAUSADO = "disparo_pausado"
 DISPARO_AJUSTADO = "disparo_ajustado"
+DISPARO_REENVIADO = "disparo_reenviado"
 
 ROTULOS = {
     LOGIN_OK: "Entrou",
@@ -64,6 +65,7 @@ ROTULOS = {
     DISPAROU: "Iniciou campanha de disparo",
     DISPARO_PAUSADO: "Pausou campanha",
     DISPARO_AJUSTADO: "Mudou ajustes de disparo",
+    DISPARO_REENVIADO: "Reenviou mensagens paradas",
 }
 
 # Eventos que merecem destaque na tela do master.

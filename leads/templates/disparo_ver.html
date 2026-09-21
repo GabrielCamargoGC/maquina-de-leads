@@ -78,6 +78,24 @@
     <div class="alerta alerta-erro" style="margin-top:16px">{{ c.erro }}</div>
   {% endif %}
 
+  {# Fica NESTE cartao e nao no relatorio: reenviar tudo zera "enviadas", o
+     cartao de relatorio deixa de ser desenhado e a confirmacao sumia junto
+     com ele -- a pessoa clicava e nao via resposta nenhuma. #}
+  {% if reenvio is not none %}
+    <div class="alerta {{ 'alerta-ok' if reenvio else 'alerta-aviso' }}"
+         style="margin-top:16px">
+      {% if reenvio %}
+        <strong>{{ reenvio|milhar }} voltaram para a fila.</strong> Estavam
+        aceitas pelo DigiSac e nunca entregues. Clique em Retomar para
+        mandar de novo.
+      {% else %}
+        Nenhuma mensagem parada encontrada. Ou o DigiSac já entregou, ou ele
+        não respondeu à consulta — nesse caso nada é reenviado, porque
+        reenviar no escuro gera mensagem repetida.
+      {% endif %}
+    </div>
+  {% endif %}
+
   {% if erros_de_conexao %}
     {# Erro de conexao nao e culpa do numero: o lead nunca foi tentado de
        verdade. Sem este botao, uma queda de 30 segundos custa
@@ -218,6 +236,40 @@
         </tbody>
       </table>
     </div>
+  {% endif %}
+
+  {# Reenvio do que o DigiSac aceitou e nunca entregou.
+
+     Fica atras de um clique e com o aviso de duplicata a vista: se a fila
+     deles escoar depois, o contato recebe duas vezes -- e duplicata e sinal
+     de spam para o WhatsApp. So entra quem esta parado ha 15 minutos e com
+     ack 0 confirmado por eles. #}
+  {% if rel.sem_confirmacao %}
+    <details style="margin-top:18px">
+      <summary style="cursor:pointer;color:var(--texto-2)">
+        Reenviar as que não foram entregues
+      </summary>
+      <div class="alerta alerta-aviso" style="margin-top:10px">
+        Só reenvia o que o DigiSac confirmar que está parado sem entregar
+        (<code>ack 0</code>) há mais de 15 minutos.
+        <br><br>
+        <strong>Risco:</strong> se a fila do DigiSac escoar depois, o contato
+        recebe a mesma mensagem duas vezes — e mensagem repetida é sinal de
+        spam. Use quando tiver certeza de que aquelas morreram: mande uma de
+        teste primeiro e confira que a nova chega com os dois tiques.
+        <form method="post" action="{{ url_for('disparo_acao', ident=c.id) }}"
+              class="acoes" style="margin:12px 0 0"
+              data-espera="Perguntando ao DigiSac uma por uma.">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button type="submit" name="acao" value="reenviar" class="secundario">
+            Procurar paradas e devolver para a fila
+          </button>
+        </form>
+        <p class="dica" style="margin:8px 0 0">
+          Consulta até 80 por vez. Se sobrarem, clique de novo.
+        </p>
+      </div>
+    </details>
   {% endif %}
 
   {# Botao de diagnostico: pergunta ao DigiSac o que ele fez com as

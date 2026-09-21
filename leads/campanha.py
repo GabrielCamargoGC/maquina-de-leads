@@ -902,6 +902,80 @@ def devolver_erros(ident):
         con.close()
 
 
+# Idade minima para considerar uma mensagem "parada", em minutos.
+#
+# ack 0 e normal nos primeiros segundos -- a mensagem acabou de ser aceita e
+# ainda vai ser despachada. Reenviar nessa janela geraria duplicata por
+# impaciencia, nao por falha.
+MINUTOS_PARA_PARADA = 15
+
+
+def procurar_paradas(ident, limite=80):
+    """[(envio_id, numero, nome)] das mensagens que o DigiSac aceitou e nao
+    despachou. Consulta o ack de cada uma; so entra quem ele confirma em 0.
+
+    Nao entra quem tem ack None: sem resposta do DigiSac nao se afirma que a
+    mensagem morreu, e reenviar no escuro e o caminho da duplicata.
+    """
+    if not digisac.configurado():
+        return []
+
+    corte = datetime.now() - timedelta(minutes=MINUTOS_PARA_PARADA)
+    con = _con()
+    try:
+        linhas = con.execute(
+            "SELECT id, numero, nome, msg_id, quando FROM envio "
+            "WHERE campanha_id=? AND status=? AND msg_id IS NOT NULL "
+            "AND msg_id<>'' ORDER BY id LIMIT ?",
+            (ident, ENVIADO, limite)).fetchall()
+    finally:
+        con.close()
+
+    paradas = []
+    for r in linhas:
+        # Sem 'quando' nao da para saber a idade; trata como antiga, porque a
+        # coluna so fica vazia em linha gravada antes deste campo existir.
+        if r["quando"]:
+            try:
+                if datetime.fromisoformat(r["quando"]) > corte:
+                    continue
+            except ValueError:
+                pass
+        if digisac.ack_da_mensagem(r["msg_id"]) == digisac.ACK_PENDENTE:
+            paradas.append((r["id"], r["numero"], r["nome"]))
+    return paradas
+
+
+def reenviar_paradas(ident, limite=80):
+    """Devolve para a fila o que o DigiSac aceitou e nunca entregou.
+
+    O msg_id antigo e apagado: ele aponta para a mensagem morta na fila
+    deles, e manter faria o webhook de um eventual despacho tardio casar com
+    a linha nova e mascarar o reenvio.
+
+    RISCO, que a tela precisa dizer: se a fila do DigiSac escoar depois, o
+    contato recebe duas vezes. Por isso so entra quem esta parado ha pelo
+    menos MINUTOS_PARA_PARADA e com ack 0 confirmado.
+    """
+    paradas = procurar_paradas(ident, limite)
+    if not paradas:
+        return 0
+    ids = [p[0] for p in paradas]
+    con = _con()
+    try:
+        marcas = ",".join("?" for _ in ids)
+        con.execute(
+            f"UPDATE envio SET status=?, msg_id='', quando=NULL, "
+            f"erro='reenviado: estava parado no DigiSac sem entregar' "
+            f"WHERE id IN ({marcas})", [NA_FILA, *ids])
+        con.commit()
+    finally:
+        con.close()
+    auditoria.registrar(auditoria.DISPARO_REENVIADO, campanha=ident,
+                        quantidade=len(ids))
+    return len(ids)
+
+
 def _fechar_se_acabou(camp_id):
     con = _con()
     resta = con.execute("SELECT count(*) n FROM envio WHERE campanha_id=? "
