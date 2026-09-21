@@ -261,13 +261,11 @@
               {# whatsappMessageId ausente é a prova de que a mensagem nunca
                  saiu do banco do DigiSac. É o campo que decide. #}
               <td>
-                {% if a.wamid %}
-                  <span class="pill pill-sim">sim</span>
-                {% elif a.despachada is false %}
-                  <span class="pill pill-nao">não despachou</span>
-                {% else %}
-                  <span class="pill pill-nao">não</span>
-                {% endif %}
+                <span class="pill {{ 'pill-sim' if a.chegou == 'sim'
+                                     else 'pill-nao' }}">
+                  {{ 'sim' if a.chegou == 'sim'
+                     else ('não despachou' if a.chegou == 'nao despachou'
+                           else 'não') }}</span>
               </td>
               <td class="fantasia">
                 {% if a.retida_em %}desde {{ a.retida_em[:16] }}

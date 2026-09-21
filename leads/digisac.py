@@ -324,7 +324,16 @@ def ver_mensagem(msg_id):
             ultimo = e
             continue
         if isinstance(r, dict):
-            return r.get("data") if isinstance(r.get("data"), dict) else r
+            # Devolve INTEIRO, sem desembrulhar o "data".
+            #
+            # O objeto de mensagem do DigiSac espalha o que interessa em dois
+            # niveis: "sent" fica na raiz e "ack"/"whatsappMessageId" ficam
+            # dentro de data. Desembrulhar descartava o "sent" em silencio, e
+            # a tela dizia "nao" onde devia dizer "nao despachou".
+            #
+            # resumir_mensagem procura em profundidade, entao o dicionario
+            # inteiro serve para os dois formatos.
+            return r
     raise ErroDigiSac(
         f"Nao consegui consultar a mensagem. {ultimo or ''}".strip(),
         definitivo=True)
@@ -359,6 +368,25 @@ def ack_da_mensagem(msg_id):
         return None
 
 
+def _achar_booleano(d, chave, profundidade=4):
+    """Acha uma chave booleana em qualquer nivel, aceitando False.
+
+    _cavar descarta False junto com None e "" -- util para texto, errado
+    para flag. Aqui False e informacao: "sent": false e a prova de que o
+    DigiSac nao despachou.
+    """
+    if not isinstance(d, dict) or profundidade < 0:
+        return None
+    if chave in d and isinstance(d[chave], bool):
+        return d[chave]
+    for v in d.values():
+        if isinstance(v, dict):
+            achado = _achar_booleano(v, chave, profundidade - 1)
+            if achado is not None:
+                return achado
+    return None
+
+
 def resumir_mensagem(dados):
     """Reduz a resposta de ver_mensagem ao que decide o diagnostico.
 
@@ -376,11 +404,26 @@ def resumir_mensagem(dados):
         return {"bruto": str(dados)[:2000]}
     wamid = _cavar(dados, ("whatsappMessageId", "whatsapp_message_id"),
                    so_texto=True)
+    # _cavar ignora valores "vazios", e False e justamente o que interessa
+    # aqui -- por isso a busca do "sent" e feita a mao, em profundidade.
+    despachada = _achar_booleano(dados, "sent")
+
+    # O rotulo sai daqui, e nao do template: "is false" no Jinja e um teste,
+    # nao comparacao de identidade, e a diferenca entre False e ausente
+    # sumia silenciosamente na tela.
+    if wamid:
+        chegou = "sim"
+    elif despachada is False:
+        chegou = "nao despachou"
+    else:
+        chegou = "nao"
+
     return {
+        "chegou": chegou,
         "id": _cavar(dados, ("id",)) or "",
         "status": _cavar(dados, ("ack", "status", "messageStatus", "state")),
         # None quando o campo nao vem; a tela distingue isso de False.
-        "despachada": _cavar(dados, ("sent",)),
+        "despachada": despachada,
         "wamid": wamid or "",
         "retida_em": _cavar(dados, ("startBlockedAt", "start_blocked_at"),
                             so_texto=True),
