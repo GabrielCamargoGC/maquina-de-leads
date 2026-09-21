@@ -360,20 +360,140 @@ def ack_da_mensagem(msg_id):
 
 
 def resumir_mensagem(dados):
-    """Reduz a resposta de ver_mensagem ao que interessa, sem depender de
-    saber o formato exato: procura os campos plausiveis e devolve o resto
-    como JSON para leitura humana."""
+    """Reduz a resposta de ver_mensagem ao que decide o diagnostico.
+
+    Os nomes dos campos vem dos tipos do SDK oficial da fabricante
+    (@ikatec/digisac-api-sdk), e nao de chute:
+
+      whatsappMessageId  ausente = a mensagem NUNCA chegou ao WhatsApp.
+                         Este e o campo decisivo: ficou so no banco deles.
+      sent               o proprio DigiSac dizendo se despachou.
+      ack                -1 erro, 0 pendente, 1 servidor, 2 entregue, 3 lida.
+      startBlockedAt     regra de bloqueio de mensagem ativa retendo o envio
+      unblockUntilAt     ate quando fica retida
+    """
     if not isinstance(dados, dict):
         return {"bruto": str(dados)[:2000]}
+    wamid = _cavar(dados, ("whatsappMessageId", "whatsapp_message_id"),
+                   so_texto=True)
     return {
         "id": _cavar(dados, ("id",)) or "",
-        "status": _cavar(dados, ("status", "ack", "messageStatus", "state")),
-        "erro": _cavar(dados, ("error", "errorMessage", "failReason",
-                               "statusMessage"), so_texto=True),
-        "enviada_em": _cavar(dados, ("sentAt", "sent_at", "timestamp",
-                                     "createdAt"), so_texto=True),
+        "status": _cavar(dados, ("ack", "status", "messageStatus", "state")),
+        # None quando o campo nao vem; a tela distingue isso de False.
+        "despachada": _cavar(dados, ("sent",)),
+        "wamid": wamid or "",
+        "retida_em": _cavar(dados, ("startBlockedAt", "start_blocked_at"),
+                            so_texto=True),
+        "retida_ate": _cavar(dados, ("unblockUntilAt", "unblock_until_at"),
+                             so_texto=True),
+        "erro": _cavar(dados, ("errorDescription", "error", "errorMessage",
+                               "failReason", "statusMessage"), so_texto=True),
         "bruto": json.dumps(dados, ensure_ascii=False)[:2000],
     }
+
+
+# Flags que de fato indicam que a camada de despacho esta viva.
+#
+# "Conectado (verde)" no painel deles le apenas isConnected, que e UM flag
+# entre cerca de 25 em Service.data.status. A sessao pode estar
+# semi-conectada: isConnected verdadeiro e a camada que envia morta. Nesse
+# estado a API aceita, cria a conversa, devolve 200 -- e o ack nunca chega.
+FLAGS_DESPACHO = ("isConnected", "isWebConnected", "isPhoneConnected",
+                  "isPhoneAuthed", "isLidMigrated", "isConflicted",
+                  "isWaitingForPhoneInternet", "isOnQrPage", "isSyncing",
+                  "isWebSyncing", "mode", "state", "disconnectedAt")
+
+
+def diagnostico_conexao():
+    """Os flags reais da conexao, e nao so o verde do painel.
+
+    Devolve (problemas, flags). problemas e a lista de sinais ruins em
+    linguagem de gente; flags e o que veio, para leitura humana.
+    """
+    if not configurado():
+        return ["DigiSac nao configurado"], {}
+
+    ident = config.DIGISAC_SERVICE_ID
+    bruto = None
+    for caminho in (f"/services/{ident}", f"/connections/{ident}"):
+        try:
+            r = _chamar(caminho, metodo="GET")
+        except ErroDigiSac:
+            continue
+        if isinstance(r, dict):
+            bruto = r.get("data") if isinstance(r.get("data"), dict) else r
+            break
+    if bruto is None:
+        return ["nao consegui ler o estado da conexao"], {}
+
+    status = bruto.get("status") if isinstance(bruto.get("status"), dict) else bruto
+    if not isinstance(status, dict):
+        status = bruto
+    flags = {}
+    for f in FLAGS_DESPACHO:
+        v = _cavar(status, (f, f[0].lower() + f[1:], f.lower()))
+        if v is not None:
+            flags[f] = v
+
+    ruins = []
+    def falso(nome):
+        return flags.get(nome) is False
+
+    if falso("isConnected"):
+        ruins.append("a conexao esta desconectada")
+    if falso("isWebConnected"):
+        ruins.append("a camada web nao esta conectada -- e ela que despacha")
+    if falso("isPhoneConnected"):
+        ruins.append("o celular nao esta alcancavel")
+    if falso("isPhoneAuthed"):
+        ruins.append("o celular nao esta autenticado")
+    if flags.get("isConflicted") is True:
+        ruins.append("a sessao esta em conflito (o WhatsApp foi aberto em "
+                     "outro lugar)")
+    if flags.get("isWaitingForPhoneInternet") is True:
+        ruins.append("esperando internet no celular")
+    if flags.get("isOnQrPage") is True:
+        ruins.append("esta na tela de QR -- o pareamento nao terminou")
+    if falso("isLidMigrated"):
+        ruins.append("a migracao de identificador (LID) do WhatsApp nao foi "
+                     "concluida; em outras plataformas isso faz exatamente "
+                     "a mensagem sair da API e nunca receber confirmacao")
+
+    # settings tambem interessam: o DigiSac pode estar retendo envio ativo.
+    ajustes = bruto.get("settings") if isinstance(bruto.get("settings"), dict) else {}
+    for nome, recado in (
+            ("blockMessageRulesActive",
+             "as regras de bloqueio de mensagem estao ativas -- elas retem "
+             "envio para quem nunca respondeu"),
+            ("unblockByReceiveMessage",
+             "o envio so e liberado depois que o contato responder")):
+        if ajustes.get(nome) is True:
+            ruins.append(recado)
+            flags[nome] = True
+
+    return ruins, flags
+
+
+def reiniciar_conexao():
+    """POST /services/<id>/restart -- reinicia a sessao sem pedir QR novo.
+
+    E a tentativa mais barata contra sessao semi-conectada: o pareamento
+    continua valendo, so a camada de envio sobe de novo. Se nao resolver,
+    o caminho seguinte e logout + refazer o pareamento inteiro, que exige
+    celular na mao.
+    """
+    if not configurado():
+        raise ErroDigiSac("DigiSac nao configurado", definitivo=True)
+    ident = config.DIGISAC_SERVICE_ID
+    ultimo = None
+    for caminho in (f"/services/{ident}/restart",
+                    f"/connections/{ident}/restart"):
+        try:
+            _chamar(caminho, corpo={})
+            return True
+        except ErroDigiSac as e:
+            ultimo = e
+    raise ultimo or ErroDigiSac("nao consegui reiniciar", definitivo=True)
 
 
 # ------------------------------------------------------------ webhook

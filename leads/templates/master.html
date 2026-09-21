@@ -114,6 +114,13 @@
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <button type="submit" class="secundario">Buscar conexões</button>
     </form>
+    {# Reinicia a sessao sem refazer o pareamento: tentativa mais barata
+       contra sessao semi-conectada. O QR continua valendo. #}
+    <form method="post" action="{{ url_for('acesso.master_digisac_reiniciar') }}"
+          data-espera="Reiniciando a sessao no DigiSac." style="display:inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit" class="secundario">Reiniciar conexao</button>
+    </form>
   </div>
 
   {% if conexoes %}
@@ -181,6 +188,27 @@
       lado em vez dos tiques.
     {% endif %}
   </div>
+
+  {# Flags reais da conexao. "Conectado (verde)" no painel deles le so
+     isConnected, que e um flag entre ~25. A sessao pode estar
+     semi-conectada: isConnected verdadeiro e a camada que despacha morta --
+     e ai a API aceita, cria a conversa, devolve 200 e o ack nunca chega. #}
+  {% if diagnostico[0] %}
+    <div class="alerta alerta-erro" style="margin-top:14px">
+      <strong>A conexao tem problema, mesmo aparecendo verde no DigiSac:</strong>
+      <ul style="margin:8px 0 0;padding-left:20px">
+        {% for p in diagnostico[0] %}<li>{{ p }}</li>{% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+  {% if diagnostico[1] %}
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;color:var(--texto-3);font-size:13px">
+        Flags da conexao ({{ diagnostico[1]|length }})</summary>
+      <pre style="white-space:pre-wrap;font-size:11.5px;margin:6px 0 0">{% for k, v in diagnostico[1].items() %}{{ k }}: {{ v }}
+{% endfor %}</pre>
+    </details>
+  {% endif %}
 
   {# O Service ID aponta para a conexao certa?
      Reconectar o numero no painel do DigiSac pode criar uma conexao NOVA,

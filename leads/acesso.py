@@ -395,6 +395,8 @@ def master():
                 else (False, "nao configurado"),
         service_ok=digisac.conferir_service_id() if digisac.configurado()
                    else (False, "nao configurado"),
+        diagnostico=digisac.diagnostico_conexao() if digisac.configurado()
+                    else ([], {}),
         env_arquivo=str(config.ARQUIVO_ENV),
         env_existe=config.ARQUIVO_ENV.is_file(),
         env_carregadas=config.contar_env(),
@@ -524,6 +526,34 @@ def master_disparo_ajustes():
         auditoria.DISPARO_AJUSTADO,
         usuario=(usuario_atual() or {}).get("usuario", ""), ip=_ip(),
         **{k: v for k, v in valores.items()})
+    return redirect(url_for("acesso.master"))
+
+
+@bp.route("/master/digisac/reiniciar", methods=["POST"])
+@exigir_master
+def master_digisac_reiniciar():
+    """Reinicia a sessao no DigiSac sem refazer o pareamento.
+
+    Tentativa mais barata contra sessao semi-conectada -- aquela em que o
+    painel deles mostra verde e a camada que despacha esta morta. O QR
+    continua valendo; so o envio sobe de novo.
+    """
+    conferir_csrf()
+    try:
+        digisac.reiniciar_conexao()
+        session["digisac_teste"] = {
+            "ok": True,
+            "mensagem": "Pedido de reinicio enviado. Espere uns 30 segundos, "
+                        "clique em Testar conexao e mande uma mensagem de "
+                        "teste antes de retomar campanha.",
+        }
+    except digisac.ErroDigiSac as e:
+        session["digisac_teste"] = {
+            "ok": False, "mensagem": f"Nao consegui reiniciar: {e}"}
+    auditoria.registrar(
+        auditoria.DIGISAC_TESTADO,
+        usuario=(usuario_atual() or {}).get("usuario", ""), ip=_ip(),
+        resultado="reinicio de conexao")
     return redirect(url_for("acesso.master"))
 
 
