@@ -580,6 +580,7 @@ def disparo_ver(ident):
         "disparo_ver.html", **dict(
             _comum("disparo"), c=c, cont=cont,
             rel=campanha.relatorio(ident),
+            erros_de_conexao=campanha.contar_erros_de_conexao(ident),
             aquecimento=campanha.situacao_aquecimento(),
             respostas=campanha.respostas(ident, 100),
             envios=campanha.envios(ident, 200),
@@ -599,6 +600,8 @@ def disparo_acao(ident):
             campanha.iniciar(ident, usuario)
         elif acao == "pausar":
             campanha.pausar(ident, usuario)
+        elif acao == "devolver":
+            campanha.devolver_erros(ident)
     except ValueError as e:
         # A mensagem mais comum aqui e "DigiSac nao respondeu". Vale mostrar
         # antes de comecar, e nao no meio de mil envios.

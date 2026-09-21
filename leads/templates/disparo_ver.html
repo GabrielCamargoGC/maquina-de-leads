@@ -78,6 +78,26 @@
     <div class="alerta alerta-erro" style="margin-top:16px">{{ c.erro }}</div>
   {% endif %}
 
+  {% if erros_de_conexao %}
+    {# Erro de conexao nao e culpa do numero: o lead nunca foi tentado de
+       verdade. Sem este botao, uma queda de 30 segundos custa
+       permanentemente todos os destinos que passaram pela fila no intervalo. #}
+    <div class="alerta alerta-aviso" style="margin-top:16px">
+      <strong>{{ erros_de_conexao|milhar }}
+        {{ 'destino' if erros_de_conexao == 1 else 'destinos' }}</strong>
+      falharam por queda da conexao, nao por problema no numero -- nunca foram
+      tentados de verdade.
+      <form method="post" action="{{ url_for('disparo_acao', ident=c.id) }}"
+            class="acoes" style="margin:10px 0 0"
+            data-espera="Devolvendo para a fila.">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit" name="acao" value="devolver" class="secundario">
+          Devolver {{ erros_de_conexao|milhar }} para a fila
+        </button>
+      </form>
+    </div>
+  {% endif %}
+
   {% if c.estado == 'rascunho' %}
     <div class="alerta alerta-aviso" style="margin-top:16px">
       Confira a mensagem abaixo antes de iniciar. Depois do primeiro envio não

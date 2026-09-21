@@ -88,11 +88,29 @@ def _chamar(caminho, corpo=None, metodo="POST"):
                    "deles. Nao e problema de token.")
         # 4xx e erro nosso (numero, token, payload): repetir da o mesmo.
         # 5xx e do lado deles e costuma passar.
-        raise ErroDigiSac(str(msg), codigo=e.code, definitivo=400 <= e.code < 500)
+        #
+        # Excecao: queda de conexao chega como 4xx e NAO e definitiva. O
+        # destino tem de voltar para a fila -- o problema e o chip, nao ele.
+        definitivo = 400 <= e.code < 500 and not e_queda_de_conexao(msg)
+        raise ErroDigiSac(str(msg), codigo=e.code, definitivo=definitivo)
     except urllib.error.URLError as e:
         raise ErroDigiSac(f"Sem resposta do DigiSac: {e.reason}", definitivo=False)
     except json.JSONDecodeError:
         raise ErroDigiSac("Resposta do DigiSac nao era JSON", definitivo=False)
+
+
+# Falhas que sao da CONEXAO, e nao do numero de destino.
+#
+# "Service (...) disconnected" significa que o chip caiu do WhatsApp Web e o
+# DigiSac esta pedindo o QR de novo. Queimar o destino nisso e injusto com o
+# lead e com a lista: ele nunca foi tentado de verdade.
+SINAIS_DE_QUEDA = ("disconnected", "not connected", "desconectado",
+                   "qrcode", "qr code", "session closed", "unauthorized device")
+
+
+def e_queda_de_conexao(mensagem):
+    m = str(mensagem or "").lower()
+    return any(s in m for s in SINAIS_DE_QUEDA)
 
 
 def testar():
@@ -247,6 +265,26 @@ def _cavar(d, chaves, profundidade=4, so_texto=False):
     return None
 
 
+def _caiu_a_conexao(dados):
+    """True quando o evento de conexao indica chip desconectado.
+
+    Le os dois sinais: isconnected falso e modo 'qr'. Um sozinho da falso
+    positivo -- 'qr' tambem aparece num pareamento que esta dando certo, e
+    isconnected chega ausente em evento que nao e de conexao.
+    """
+    if not isinstance(dados, dict):
+        return False
+    status = dados.get("status")
+    alvo = status if isinstance(status, dict) else dados
+
+    conectado = _cavar(alvo, ("isconnected", "isConnected"))
+    if conectado is False:
+        return True
+    modo = _cavar(alvo, ("mode",))
+    expirado = _cavar(alvo, ("isqrcodeexpired", "isQrcodeExpired"))
+    return str(modo).lower() == "qr" and conectado is not True and expirado is not None
+
+
 def ler_evento(corpo):
     """Achata o payload do webhook no que interessa.
 
@@ -282,6 +320,10 @@ def ler_evento(corpo):
         # isFromMe distingue o que NOS mandamos do que o lead respondeu. Sem
         # isso, a propria mensagem da campanha seria lida como resposta.
         "minha": bool(_cavar(dados, ("isFromMe", "fromMe")) or False),
+        # service.updated com isconnected=false, ou pedindo QR, quer dizer que
+        # o chip caiu do WhatsApp Web. Vem como evento proprio, antes de o
+        # proximo envio falhar.
+        "caiu": _caiu_a_conexao(dados),
     }
 
 

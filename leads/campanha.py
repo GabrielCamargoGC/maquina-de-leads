@@ -613,6 +613,13 @@ def registrar_evento(ev):
             _pular_pendentes(ev["numero"])
         return
 
+    # Evento de conexao: o DigiSac avisa que o chip caiu, e isso chega antes
+    # de o proximo envio falhar. Pausar aqui poupa os destinos que a fila
+    # tentaria nesse meio tempo.
+    if "service" in (ev.get("tipo") or "").lower() and ev.get("caiu"):
+        pausar_rodando_por_queda(ev.get("estado", "")[:200])
+        return
+
     novo = _MAPA_STATUS.get(ev.get("estado", ""))
     if not novo:
         return
@@ -754,6 +761,81 @@ def _contar_erro(camp_id, usuario=""):
     return True
 
 
+def pausar_por_queda(camp_id, detalhe=""):
+    """Pausa por conexao caida, com recado que diz o que fazer.
+
+    Separado do freio por erro porque a acao e outra: erro de numero se
+    resolve limpando a lista, queda de conexao se resolve lendo o QR no
+    painel do DigiSac. Mensagem generica aqui manda a pessoa procurar no
+    lugar errado.
+    """
+    _erros_seguidos["n"] = 0
+    _mudar_estado(camp_id, PAUSADA,
+                  erro="Pausada sozinha: a conexao do WhatsApp caiu no "
+                       "DigiSac. Reconecte o numero la (vai pedir o QR) e "
+                       "clique em Retomar. Os destinos que falharam por isso "
+                       "voltaram para a fila -- nenhum lead foi perdido.")
+    auditoria.registrar(auditoria.DISPARO_PAUSADO, usuario="automatico",
+                        campanha=camp_id, motivo="conexao caiu",
+                        detalhe=detalhe[:200])
+
+
+def pausar_rodando_por_queda(detalhe=""):
+    """Pausa toda campanha rodando. Chamado quando o webhook avisa que a
+    conexao caiu -- que costuma chegar antes do proximo envio falhar."""
+    con = _con()
+    try:
+        ids = [r["id"] for r in con.execute(
+            "SELECT id FROM campanha WHERE estado=?", (RODANDO,)).fetchall()]
+    finally:
+        con.close()
+    for i in ids:
+        pausar_por_queda(i, detalhe)
+    return len(ids)
+
+
+def contar_erros_de_conexao(ident):
+    """Quantos erros daquela campanha foram culpa da conexao, e nao do numero.
+
+    A tela precisa do numero para nao oferecer "devolver para a fila" quando
+    o que falhou foi o dado -- devolver numero que nao existe so o faria
+    falhar de novo.
+    """
+    con = _con()
+    try:
+        linhas = con.execute(
+            "SELECT erro FROM envio WHERE campanha_id=? AND status=?",
+            (ident, ERRO)).fetchall()
+    finally:
+        con.close()
+    return sum(1 for r in linhas if digisac.e_queda_de_conexao(r["erro"]))
+
+
+def devolver_erros(ident):
+    """Devolve para a fila os destinos que falharam por causa da conexao.
+
+    Erro de conexao nao e culpa do numero: o lead nunca foi tentado de
+    verdade. Sem isto, uma queda de 30 segundos custa permanentemente todos
+    os destinos que passaram pela fila naquele intervalo.
+
+    Numero que nao existe no WhatsApp continua marcado: esse erro e do dado
+    e repetir daria o mesmo.
+    """
+    con = _con()
+    try:
+        alvos = [r["id"] for r in con.execute(
+            "SELECT id, erro FROM envio WHERE campanha_id=? AND status=?",
+            (ident, ERRO)).fetchall() if digisac.e_queda_de_conexao(r["erro"])]
+        if alvos:
+            marcas = ",".join("?" for _ in alvos)
+            con.execute(f"UPDATE envio SET status=?, erro=NULL, quando=NULL "
+                        f"WHERE id IN ({marcas})", [NA_FILA, *alvos])
+            con.commit()
+        return len(alvos)
+    finally:
+        con.close()
+
+
 def _fechar_se_acabou(camp_id):
     con = _con()
     resta = con.execute("SELECT count(*) n FROM envio WHERE campanha_id=? "
@@ -788,6 +870,13 @@ def _passo():
         _marcar(item["id"], ENVIADO, msg_id=msg_id or "")
         _erros_seguidos["n"] = 0          # deu certo: zera o freio
     except digisac.ErroDigiSac as e:
+        if digisac.e_queda_de_conexao(str(e)):
+            # Chip caiu do WhatsApp. Pausa JA, sem esperar o freio de 10:
+            # o primeiro erro desses ja diz tudo, e insistir so transforma
+            # uma queda de conexao numa lista de destinos queimados.
+            _marcar(item["id"], NA_FILA, erro=str(e))
+            pausar_por_queda(item["camp"], str(e))
+            return False
         if e.definitivo:
             _marcar(item["id"], ERRO, erro=str(e))
             if _contar_erro(item["camp"]):
