@@ -483,6 +483,115 @@ def baixar_refinado(ident, formato):
                      download_name=f"refinado.{formato}")
 
 
+# ------------------------------------------------------------ disparo
+
+
+def _minutos(segundos):
+    if segundos < 90:
+        return f"{segundos}s"
+    if segundos < 5400:
+        return f"{round(segundos / 60)} min"
+    h, m = divmod(round(segundos / 60), 60)
+    return f"{h}h{m:02d}"
+
+
+@app.route("/disparo")
+def tela_disparo():
+    return render_template(
+        "disparo.html", **dict(_comum("disparo"),
+                               campanhas=campanha.listar(30),
+                               optout=campanha.listar_optout(50),
+                               digisac_ok=digisac.configurado()))
+
+
+@app.route("/disparo/nova", methods=["GET", "POST"])
+def disparo_nova():
+    """Monta a campanha a partir dos filtros da busca.
+
+    Dois passos de proposito: aqui so cria, em rascunho. Iniciar e outro
+    clique na tela da campanha -- disparo de horas nao sai de um botao so,
+    porque o erro nao tem volta depois do primeiro envio.
+    """
+    f = FormFiltros(request.form if request.method == "POST" else request.args)
+    fonte = (request.values.get("fonte") or "busca").strip()
+    ctx = dict(_comum("disparo"), f=f, query=f.query(), fonte=fonte,
+               erro=None, resumo=None, total=None, exemplos=[],
+               nome=request.values.get("nome", ""),
+               mensagem=request.values.get("mensagem", ""),
+               digisac_ok=digisac.configurado(), segundos=0)
+
+    if not f.preenchido or not ctx["base_pronta"]:
+        ctx["erro"] = "Faça uma busca primeiro e clique em Disparar no resultado."
+        return render_template("disparo_nova.html", **ctx)
+
+    try:
+        filtros = f.para_busca()
+        ctx["total"] = busca.contar(filtros)
+        destinos, resumo = campanha.levantar_destinos(filtros, fonte)
+        ctx["resumo"] = resumo
+        ctx["segundos"] = campanha.tempo_estimado(resumo["vao_receber"])
+        # Tres nomes de verdade para a previa. Nome de empresa da Receita
+        # tem cada coisa, e "Olá MERCADO SAO JOSE LTDA ME" numa mensagem se
+        # denuncia na primeira linha -- melhor ver antes de mandar.
+        ctx["exemplos"] = [n for n, _ in destinos[:3] if n]
+    except busca.ErroBusca as e:
+        ctx["erro"] = str(e)
+        return render_template("disparo_nova.html", **ctx)
+    except Exception as e:
+        traceback.print_exc()
+        ctx["erro"] = f"Erro inesperado ao levantar os destinos: {e}"
+        return render_template("disparo_nova.html", **ctx)
+
+    if request.method == "POST":
+        acesso.conferir_csrf()
+        try:
+            ident = campanha.criar(
+                ctx["nome"], ctx["mensagem"], destinos,
+                criada_por=(acesso.usuario_atual() or {}).get("usuario", ""))
+            return redirect(url_for("disparo_ver", ident=ident))
+        except ValueError as e:
+            ctx["erro"] = str(e)
+
+    return render_template("disparo_nova.html", **ctx)
+
+
+@app.route("/disparo/<ident>")
+def disparo_ver(ident):
+    c = campanha.ver(ident)
+    if not c:
+        return render_template("erro.html", codigo=404, nome="Campanha nao encontrada",
+                               mensagem="Ela pode ter sido apagada.",
+                               **_comum("disparo")), 404
+    cont = campanha.contagem(ident)
+    restam = cont.get(campanha.NA_FILA, 0)
+    return render_template(
+        "disparo_ver.html", **dict(
+            _comum("disparo"), c=c, cont=cont,
+            envios=campanha.envios(ident, 200),
+            restam=restam,
+            faltam=_minutos(campanha.tempo_estimado(restam)),
+            pct=round(100 * cont.get("concluidos", 0) / max(cont.get("total", 1), 1)),
+            digisac_ok=digisac.configurado()))
+
+
+@app.route("/disparo/<ident>/acao", methods=["POST"])
+def disparo_acao(ident):
+    acesso.conferir_csrf()
+    acao = request.form.get("acao")
+    usuario = (acesso.usuario_atual() or {}).get("usuario", "")
+    try:
+        if acao == "iniciar":
+            campanha.iniciar(ident, usuario)
+        elif acao == "pausar":
+            campanha.pausar(ident, usuario)
+    except ValueError as e:
+        # A mensagem mais comum aqui e "DigiSac nao respondeu". Vale mostrar
+        # antes de comecar, e nao no meio de mil envios.
+        return render_template("erro.html", codigo=400, nome="Nao deu para iniciar",
+                               mensagem=str(e), **_comum("disparo")), 400
+    return redirect(url_for("disparo_ver", ident=ident))
+
+
 @app.route("/novidades")
 def tela_novidades():
     f = FormFiltros(request.args)

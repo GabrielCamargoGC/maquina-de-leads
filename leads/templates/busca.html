@@ -29,6 +29,11 @@
           <button type="submit" name="formato" value="xlsx" class="primario">Baixar Excel</button>
           <button type="submit" name="formato" value="csv" class="secundario">Baixar CSV</button>
         </form>
+        {# Disparo sai da mesma busca, sem baixar nada no meio. Fora do form
+           acima porque aquele e POST de export; este e GET para a tela de
+           montar campanha. #}
+        <a class="botao secundario"
+           href="{{ url_for('disparo_nova', **query) }}">Disparar</a>
         {% endif %}
       </div>
       {% if total > linhas|length %}

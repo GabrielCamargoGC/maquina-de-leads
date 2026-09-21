@@ -208,6 +208,54 @@ def criar(nome, mensagem, destinos, criada_por=""):
     return ident
 
 
+def levantar_destinos(filtros, fonte="busca", dir_dados=None, teto=None):
+    """Destinos de disparo a partir dos filtros de uma busca.
+
+    Devolve (lista, resumo). A lista ja vem deduplicada por numero e so com
+    celular -- fixo raramente tem WhatsApp e so derruba a entrega. O resumo
+    e o que a tela mostra ANTES de confirmar: quantos a busca achou, quantos
+    tem celular, quantos estao em opt-out.
+
+    Para de ler ao passar do teto. Sem isso, uma busca de cidade grande
+    montaria 200 mil linhas em memoria so para a tela recusar depois.
+    """
+    from . import exportar
+
+    teto = config.DISPARO_MAX_DESTINOS if teto is None else teto
+    criar_tabelas()
+    con = _con()
+    try:
+        lista, bloqueados, passou = [], 0, False
+        for nome, numero in exportar._linhas_disparo(filtros, fonte, dir_dados):
+            if esta_bloqueado(numero, con):
+                bloqueados += 1
+                continue
+            if len(lista) >= teto:
+                passou = True
+                break
+            lista.append((nome, numero))
+    finally:
+        con.close()
+
+    return lista, {
+        "com_celular": len(lista) + bloqueados,
+        "em_optout": bloqueados,
+        "vao_receber": len(lista),
+        "passou_do_teto": passou,
+        "teto": teto,
+    }
+
+
+def tempo_estimado(quantos):
+    """Segundos que a campanha deve levar, pelo ritmo medio configurado.
+
+    Vai na tela porque a ordem de grandeza muda a decisao: 40 numeros e
+    cafe, 5 mil atravessa a tarde e chega em horario que irrita.
+    """
+    medio = (config.DISPARO_PAUSA_MIN + config.DISPARO_PAUSA_MAX) / 2
+    return int(quantos * medio)
+
+
 def montar_mensagem(modelo, nome):
     """Troca {nome} pelo nome da empresa.
 

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% import "_filtros.html" as ff %}
+{% block titulo %}{{ c.nome }} — Disparo{% endblock %}
+{% block cabecalho %}{{ c.nome }}{% endblock %}
+{% block subtitulo %}Campanha de WhatsApp.{% endblock %}
+
+{% block cabeca %}
+{# Recarrega sozinho enquanto roda. A alternativa seria a pessoa apertar F5
+   a cada minuto -- e ela vai apertar, porque uma campanha de horas sem sinal
+   de vida parece travada. #}
+{% if c.estado == 'rodando' %}<meta http-equiv="refresh" content="20">{% endif %}
+{% endblock %}
+
+{% block conteudo %}
+
+<div class="card">
+  <div class="resumo">
+    <div>
+      <div class="num">
+        {{ cont.concluidos|milhar }} <span class="fantasia">/ {{ cont.total|milhar }}</span>
+      </div>
+      <div class="label">
+        {% if c.estado == 'rodando' %}
+          disparando &middot; faltam ~{{ faltam }}
+        {% elif c.estado == 'pausada' %}
+          pausada &middot; {{ restam|milhar }} ainda na fila
+        {% elif c.estado == 'concluida' %}
+          concluída
+        {% else %}
+          rascunho &middot; ainda não começou
+        {% endif %}
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('disparo_acao', ident=c.id) }}"
+          class="acoes" style="margin:0"
+          data-espera="Falando com o DigiSac.">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if c.estado in ('rascunho', 'pausada') %}
+        <button type="submit" name="acao" value="iniciar" class="primario"
+                {{ 'disabled' if not digisac_ok or restam == 0 }}>
+          {{ 'Retomar' if c.estado == 'pausada' else 'Iniciar disparo' }}
+        </button>
+      {% elif c.estado == 'rodando' %}
+        <button type="submit" name="acao" value="pausar" class="secundario">
+          Pausar
+        </button>
+      {% endif %}
+    </form>
+  </div>
+
+  {% if cont.total %}
+    {# .barra > span e a estrutura que o resto do site ja usa; inventar
+       outra aqui daria duas barras diferentes na mesma aplicacao. #}
+    <div class="barra" style="margin-top:18px;height:10px">
+      <span style="width:{{ pct }}%"></span>
+    </div>
+  {% endif %}
+
+  <div class="checks" style="margin-top:16px">
+    <span class="fantasia">enviados <strong>{{ cont.get('enviado', 0)|milhar }}</strong></span>
+    <span class="fantasia">entregues <strong>{{ cont.get('entregue', 0)|milhar }}</strong></span>
+    <span class="fantasia">lidos <strong>{{ cont.get('lido', 0)|milhar }}</strong></span>
+    <span class="fantasia">erros <strong>{{ cont.get('erro', 0)|milhar }}</strong></span>
+    {% if cont.get('pulado') %}
+      <span class="fantasia">pulados (opt-out)
+        <strong>{{ cont.get('pulado', 0)|milhar }}</strong></span>
+    {% endif %}
+    <span class="fantasia">na fila <strong>{{ restam|milhar }}</strong></span>
+  </div>
+
+  {% if c.estado == 'rascunho' %}
+    <div class="alerta alerta-aviso" style="margin-top:16px">
+      Confira a mensagem abaixo antes de iniciar. Depois do primeiro envio não
+      tem volta — dá para pausar, não para desfazer.
+    </div>
+  {% endif %}
+
+  {% if cont.get('entregue', 0) == 0 and cont.get('enviado', 0) > 5 %}
+    <div class="alerta alerta-aviso" style="margin-top:16px">
+      {{ cont.get('enviado', 0)|milhar }} saíram e nenhum consta como entregue.
+      Ou o webhook não está chegando, ou o formato dele não bate — confira em
+      <a href="/master">Master</a>, em "Últimos eventos do webhook". O disparo
+      em si não é afetado.
+    </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Mensagem</h2>
+  <pre style="white-space:pre-wrap;margin:0;font:inherit">{{ c.mensagem }}</pre>
+</div>
+
+{% if envios %}
+<div class="card" style="padding:0">
+  <div style="padding:22px 26px 0">
+    <h2 style="margin-bottom:4px">Envios</h2>
+    <p class="dica">Primeiros {{ envios|length }} da fila.</p>
+  </div>
+  <div class="tabela-rolagem">
+    <table>
+      <thead><tr><th>Empresa</th><th>Número</th><th>Status</th><th>Detalhe</th></tr></thead>
+      <tbody>
+      {% for e in envios %}
+        <tr>
+          <td>{{ e.nome or '—' }}</td>
+          <td>{{ e.numero }}{{ ff.botao_copiar(e.numero) }}</td>
+          <td>
+            <span class="pill {{ 'pill-sim' if e.status in ('entregue', 'lido')
+                                 else ('pill-nao' if e.status in ('erro', 'pulado')
+                                       else '') }}">{{ e.status }}</span>
+          </td>
+          <td class="fantasia">{{ e.erro or (e.quando[11:19] if e.quando else '') }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="acoes">
+  <a class="botao secundario" href="{{ url_for('tela_disparo') }}">Todas as campanhas</a>
+</div>
+
+{% endblock %}

@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% import "_filtros.html" as ff %}
+{% block titulo %}Nova campanha — Maquina de Leads{% endblock %}
+{% block cabecalho %}Nova campanha{% endblock %}
+{% block subtitulo %}Disparo de WhatsApp para o resultado da sua busca.{% endblock %}
+
+{% block conteudo %}
+
+{% if not digisac_ok %}
+  <div class="card">
+    <div class="alerta alerta-aviso">
+      O DigiSac não está configurado. Peça ao master para preencher as
+      credenciais em <a href="/master">Master</a> antes de criar campanha.
+    </div>
+  </div>
+{% endif %}
+
+{% if erro %}
+  <div class="card"><div class="alerta alerta-erro">{{ erro }}</div></div>
+{% endif %}
+
+{% if resumo %}
+<form method="post" action="{{ url_for('disparo_nova') }}"
+      data-espera="Montando a campanha.">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {{ ff.campos_ocultos(query) }}
+  <input type="hidden" name="fonte" value="{{ fonte }}">
+
+  <div class="card">
+    <h2>1. Quem vai receber</h2>
+    <p class="dica">{{ f.descricao() }}</p>
+
+    {# A conta aberta, e nao so o numero final. Quem dispara precisa ver
+       onde os leads se perderam: sem celular na base e opt-out sao motivos
+       diferentes, e so um deles tem conserto. #}
+    <table style="margin-top:14px;max-width:420px">
+      <tbody>
+        <tr>
+          <td class="fantasia">Empresas encontradas</td>
+          <td style="text-align:right">{{ total|milhar }}</td>
+        </tr>
+        <tr>
+          <td class="fantasia">Com celular</td>
+          <td style="text-align:right">{{ resumo.com_celular|milhar }}</td>
+        </tr>
+        {% if resumo.em_optout %}
+        <tr>
+          <td class="fantasia">Em opt-out (pediram para parar)</td>
+          <td style="text-align:right">&minus; {{ resumo.em_optout|milhar }}</td>
+        </tr>
+        {% endif %}
+        <tr style="border-top:1px solid var(--linha-forte)">
+          <td><strong>Vão receber</strong></td>
+          <td style="text-align:right">
+            <strong class="destaque">{{ resumo.vao_receber|milhar }}</strong>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    {% if resumo.passou_do_teto %}
+      <div class="alerta alerta-aviso" style="margin-top:14px">
+        A busca tem mais gente que o teto de {{ resumo.teto|milhar }} por
+        campanha. Vão os primeiros {{ resumo.teto|milhar }}; refine a busca
+        (bairro, CNAE, porte) para escolher quem entra em vez de deixar o
+        corte no acaso.
+      </div>
+    {% endif %}
+
+    {% if resumo.vao_receber == 0 %}
+      <div class="alerta alerta-erro" style="margin-top:14px">
+        Nenhum destino. Dos {{ total|milhar }} encontrados, nenhum tem celular
+        utilizável na base da Receita — o campo de telefone dela guarda 8
+        dígitos e fixo não entra em disparo.
+      </div>
+    {% endif %}
+  </div>
+
+  {% if resumo.vao_receber %}
+  <div class="card">
+    <h2>2. A mensagem</h2>
+    <div class="campo">
+      <label for="nome">Nome da campanha</label>
+      <input class="entrada" id="nome" name="nome" value="{{ nome }}"
+             placeholder="MEI Assis - setembro" maxlength="80" required>
+      <span class="dica">só para você achar depois na lista</span>
+    </div>
+
+    <div class="campo" style="margin-top:16px">
+      <label for="mensagem">Texto</label>
+      <textarea class="entrada" id="mensagem" name="mensagem" rows="6"
+                required placeholder="Olá {nome}, tudo bem?">{{ mensagem }}</textarea>
+      <span class="dica">
+        <code>{nome}</code> vira o nome da empresa. Use — texto idêntico para
+        centenas de números é o que o WhatsApp mede para decidir que é disparo
+        em massa.
+      </span>
+    </div>
+
+    {% if exemplos %}
+      <div class="alerta alerta-info" style="margin-top:14px">
+        <strong>Como o nome vai sair:</strong>
+        {% for e in exemplos %}<code>{{ e }}</code>{% if not loop.last %} · {% endif %}{% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="alerta alerta-aviso" style="margin-top:14px">
+      No ritmo de 3 a 6 segundos por envio, {{ resumo.vao_receber|milhar }}
+      mensagens levam cerca de
+      <strong>{{ (segundos // 60)|int }} min</strong>.
+      {% if segundos > 14400 %}
+        Isso atravessa a tarde — comece cedo para não terminar em horário que
+        incomoda.
+      {% endif %}
+    </div>
+
+    <div class="acoes">
+      <button type="submit" class="primario" {{ 'disabled' if not digisac_ok }}>
+        Criar campanha
+      </button>
+      <a class="botao secundario" href="{{ url_for('tela_busca', **query) }}">
+        Voltar à busca</a>
+    </div>
+    <p class="dica">
+      Criar não dispara. A campanha nasce como rascunho e você confirma na
+      tela seguinte.
+    </p>
+  </div>
+  {% endif %}
+</form>
+{% endif %}
+
+{% endblock %}

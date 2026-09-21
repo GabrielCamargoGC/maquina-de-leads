@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block titulo %}Disparo — Maquina de Leads{% endblock %}
+{% block cabecalho %}Disparo{% endblock %}
+{% block subtitulo %}Campanhas de WhatsApp e lista de opt-out.{% endblock %}
+
+{% block conteudo %}
+
+{% if not digisac_ok %}
+  <div class="card">
+    <div class="alerta alerta-aviso">
+      O DigiSac não está configurado. As credenciais ficam em
+      <a href="/master">Master</a>.
+    </div>
+  </div>
+{% endif %}
+
+<div class="card">
+  <h2>Campanhas</h2>
+  {% if not campanhas %}
+    <p class="dica">
+      Nenhuma ainda. Campanha nasce de uma busca: faça a consulta na aba
+      <a href="/busca">Busca</a> e clique em <strong>Disparar</strong> no
+      resultado. Assim a lista sai dos mesmos filtros que você já usa para
+      exportar.
+    </p>
+  {% else %}
+    <div class="tabela-rolagem">
+      <table>
+        <thead>
+          <tr><th>Campanha</th><th>Criada</th><th>Por</th>
+              <th>Destinos</th><th>Estado</th></tr>
+        </thead>
+        <tbody>
+        {% for c in campanhas %}
+          <tr>
+            <td><a href="{{ url_for('disparo_ver', ident=c.id) }}">{{ c.nome }}</a></td>
+            <td class="fantasia">{{ c.criada_em[:10]|replace('-', '/') }}
+              {{ c.criada_em[11:16] }}</td>
+            <td class="fantasia">{{ c.criada_por or '—' }}</td>
+            <td>{{ c.total|milhar }}</td>
+            <td>
+              <span class="pill {{ 'pill-sim' if c.estado == 'concluida'
+                                   else ('pill-nao' if c.estado == 'pausada' else '') }}">
+                {{ c.estado }}</span>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+
+{# Opt-out em tela, e nao so no banco. Quem dispara precisa poder responder
+   "vocês ainda me mandam mensagem?" olhando, e precisa ver que a lista
+   cresce -- e o unico sinal de que a mensagem esta incomodando. #}
+<div class="card">
+  <h2>Opt-out <span class="fantasia">({{ optout|length }})</span></h2>
+  <p class="dica">
+    Números que pediram para parar. Saem de qualquer campanha
+    automaticamente, inclusive das que já estão rodando.
+  </p>
+  {% if optout %}
+    <div class="tabela-rolagem">
+      <table>
+        <thead><tr><th>Número</th><th>Quando</th><th>Origem</th><th>O que disse</th></tr></thead>
+        <tbody>
+        {% for o in optout %}
+          <tr>
+            <td>{{ o.numero }}</td>
+            <td class="fantasia">{{ o.quando[:10]|replace('-', '/') }}
+              {{ o.quando[11:16] }}</td>
+            <td class="fantasia">{{ o.origem or '—' }}</td>
+            <td class="fantasia">{{ o.texto or '—' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="dica">Ninguém pediu para sair ainda.</p>
+  {% endif %}
+</div>
+
+{% endblock %}
