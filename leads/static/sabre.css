@@ -149,15 +149,37 @@ body {
 
 /* ---------------- topo e navegacao ---------------- */
 
+/* A navegacao fica SEMPRE na mesma linha do titulo.
+ *
+ * Com flex-wrap: wrap ela caia para a linha de baixo assim que o titulo
+ * ficasse largo -- e cada aba tem subtitulo de tamanho diferente, entao a
+ * nav mudava de lugar a cada troca de aba. Menu que anda e menu em que a
+ * pessoa erra o clique: a memoria muscular aponta para onde ele estava.
+ *
+ * O bloco do titulo encolhe (min-width: 0 permite ir abaixo da largura do
+ * conteudo) e o subtitulo corta com "..." em vez de empurrar a nav. */
 .topo {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 14px;
+  flex-wrap: nowrap;
+  gap: 18px;
   padding-bottom: 18px;
   margin-bottom: 26px;
   border-bottom: 1px solid var(--linha);
+}
+
+.topo > div:first-child { min-width: 0; flex: 1 1 auto; }
+
+.topo > nav { flex: 0 0 auto; flex-wrap: nowrap; }
+
+/* Abaixo disto a nav de dez itens nao cabe ao lado do titulo, e forcar
+ * nowrap daria rolagem horizontal na pagina -- pior que empilhar. O corte e
+ * em 1150px porque e a largura em que os dez itens ainda cabem. */
+@media (max-width: 1150px) {
+  .topo { flex-wrap: wrap; }
+  .topo > nav { flex-wrap: wrap; }
+  .topo p { white-space: normal; overflow: visible; }
 }
 
 .topo h1 {
@@ -180,7 +202,11 @@ body {
   box-shadow: 0 0 9px 1px rgba(255,107,0,.6);
 }
 
-.topo p { font-size: 13.5px; color: var(--texto-3); margin: 3px 0 0; }
+.topo p {
+  font-size: 13.5px; color: var(--texto-3); margin: 3px 0 0;
+  /* Corta em vez de esticar: e o subtitulo que empurrava a nav. */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 nav { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 
