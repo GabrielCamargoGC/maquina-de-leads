@@ -74,23 +74,26 @@
   <div class="grade" style="margin-top:14px">
     <div>
       <div class="num">{{ rel.saiu|milhar }}</div>
-      <div class="label">saíram</div>
+      <div class="label">enviadas</div>
     </div>
     <div>
       <div class="num">{{ rel.chegou|milhar }}</div>
       <div class="label">
-        chegaram{% if rel.saiu %} &middot; {{ rel.pct_chegou }}%{% endif %}
+        entregues{% if rel.saiu %} &middot; {{ rel.pct_chegou }}%{% endif %}
       </div>
     </div>
     <div>
       <div class="num">{{ rel.lido|milhar }}</div>
       <div class="label">
-        lidas{% if rel.saiu %} &middot; {{ rel.pct_lido }}%{% endif %}
+        lidas <span class="fantasia">✓✓</span>{% if rel.saiu %}
+        &middot; {{ rel.pct_lido }}%{% endif %}
       </div>
     </div>
     <div>
       <div class="num">{{ rel.nao_lido|milhar }}</div>
-      <div class="label">chegaram e não abriram</div>
+      {# "chegaram e nao abriram" era ilegivel fora do contexto dos outros
+         quadros. Os tiques do WhatsApp dizem a mesma coisa sem explicacao. #}
+      <div class="label">entregues, não lidas <span class="fantasia">✓✓</span></div>
     </div>
     <div>
       <div class="num">{{ rel.erro|milhar }}</div>
