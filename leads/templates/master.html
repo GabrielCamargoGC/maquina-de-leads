@@ -161,6 +161,75 @@
     </div>
   </form>
 
+  {# Freios do disparo. Ficam aqui e nao na campanha porque sao propriedade
+     do NUMERO: por campanha, a segunda comecaria a aquecer do zero de novo. #}
+  <h3 style="margin:24px 0 10px;font-size:15px">Aquecimento e freios</h3>
+
+  <div class="alerta {{ 'alerta-ok' if aquecimento.pode else 'alerta-aviso' }}">
+    {% if aquecimento.ligado %}
+      Dia útil <strong>{{ aquecimento.dia }}</strong> de aquecimento &middot;
+      teto de hoje <strong>{{ aquecimento.teto }}</strong> &middot;
+      já saíram <strong>{{ aquecimento.hoje }}</strong>
+      {% if aquecimento.restam_hoje is not none %}
+        &middot; restam {{ aquecimento.restam_hoje }}
+      {% endif %}
+    {% else %}
+      Aquecimento desligado — sem teto diário.
+    {% endif %}
+    {% if not aquecimento.pode %}
+      <br>Disparo parado agora: {{ aquecimento.motivo }}. Retoma sozinho.
+    {% endif %}
+  </div>
+
+  <form method="post" action="{{ url_for('acesso.master_disparo_ajustes') }}"
+        data-espera="Salvando.">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="checks" style="margin-top:14px">
+      <label class="toggle">
+        <input type="checkbox" name="aquecimento"
+          {{ 'checked' if aquecimento.ligado }}> Aquecer o número
+      </label>
+      <label class="toggle">
+        <input type="checkbox" name="so_dias_uteis"
+          {{ 'checked' if aquecimento.so_dias_uteis }}> Só dias de semana
+      </label>
+    </div>
+    <p class="dica">
+      Aquecendo: 50/dia nos 3 primeiros dias úteis, 100 até o 7º, 250 até o
+      14º, 500 depois. A campanha não morre ao bater o teto — para e continua
+      no dia seguinte.
+    </p>
+
+    <div class="linha-form" style="margin-top:12px">
+      <div class="campo pequeno">
+        <label for="jan_ini">Das</label>
+        <input class="entrada" id="jan_ini" name="janela_inicio" type="number"
+               min="0" max="23" value="{{ aquecimento.janela.split('h')[0] }}">
+      </div>
+      <div class="campo pequeno">
+        <label for="jan_fim">Às</label>
+        <input class="entrada" id="jan_fim" name="janela_fim" type="number"
+               min="1" max="24"
+               value="{{ aquecimento.janela.split(' as ')[1]|replace('h','') }}">
+      </div>
+      <div class="campo medio">
+        <label for="freio">Pausar após N erros seguidos</label>
+        <input class="entrada" id="freio" name="freio_erros" type="number"
+               min="0" value="{{ aquecimento.freio_erros }}">
+        <span class="dica">0 desliga o freio</span>
+      </div>
+      <div class="campo medio">
+        <label for="aq_ini">Aquecendo desde</label>
+        <input class="entrada" id="aq_ini" name="aquecimento_inicio" type="date"
+               value="{{ aquecimento.inicio }}">
+        <span class="dica">chip novo: ponha hoje</span>
+      </div>
+    </div>
+    <div class="acoes">
+      <button type="submit" class="secundario">Salvar ajustes</button>
+    </div>
+  </form>
+
   {# Eventos crus do webhook. E instrumento de conferencia: prova que o
      DigiSac esta chamando de volta, e mostra o formato exato do corpo --
      que e o que falta para parar de adivinhar o mapeamento. #}

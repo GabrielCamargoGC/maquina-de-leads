@@ -26,7 +26,7 @@ import threading
 import time
 import traceback
 import uuid
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from . import auditoria, config, digisac
 
@@ -84,6 +84,8 @@ def criar_tabelas():
     # nome. Guardar o corpo como chegou e o que permite corrigir o
     # mapeamento com o dado real na mao em vez de continuar adivinhando --
     # e e a unica forma de a tela mostrar "chegou, mas nao entendi".
+    con.execute("""CREATE TABLE IF NOT EXISTS ajuste (
+        chave TEXT PRIMARY KEY, valor TEXT)""")
     con.execute("""CREATE TABLE IF NOT EXISTS webhook_bruto (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         quando TEXT NOT NULL, corpo TEXT, entendido INTEGER DEFAULT 0,
@@ -135,6 +137,161 @@ def listar_brutos(limite=20):
                     (limite,)).fetchall()
     con.close()
     return [dict(x) for x in r]
+
+
+# ------------------------------------------------------------ ajustes
+
+
+# Curva de aquecimento: dia util desde o inicio -> teto de envios no dia.
+#
+# Numero novo em rajada e o gatilho mais obvio de bloqueio. Subir devagar nao
+# impede denuncia -- denuncia e o que derruba de verdade -- mas da tempo de
+# medir resposta e erro com 50 antes de arriscar 1.200.
+CURVA_AQUECIMENTO = ((3, 50), (7, 100), (14, 250))
+TETO_AQUECIDO = 500
+
+PADROES = {
+    "aquecimento": "1",
+    "aquecimento_inicio": "",      # vazio = comeca hoje na primeira consulta
+    "janela_inicio": "8",
+    "janela_fim": "18",
+    "so_dias_uteis": "1",
+    "freio_erros": "10",
+}
+
+
+def ajuste(chave, padrao=None):
+    con = _con()
+    try:
+        r = con.execute("SELECT valor FROM ajuste WHERE chave=?", (chave,)).fetchone()
+    except sqlite3.OperationalError:
+        return PADROES.get(chave, padrao)
+    finally:
+        con.close()
+    if r is None or r["valor"] is None:
+        return PADROES.get(chave, padrao)
+    return r["valor"]
+
+
+def ajuste_int(chave):
+    try:
+        return int(str(ajuste(chave)).strip())
+    except (TypeError, ValueError):
+        return int(PADROES.get(chave, 0) or 0)
+
+
+def ajuste_liga(chave):
+    return str(ajuste(chave)).strip() in ("1", "on", "true", "sim")
+
+
+def gravar_ajustes(valores):
+    criar_tabelas()
+    con = _con()
+    try:
+        for k, v in (valores or {}).items():
+            con.execute("INSERT INTO ajuste (chave, valor) VALUES (?,?) "
+                        "ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor",
+                        (k, "" if v is None else str(v)))
+        con.commit()
+    finally:
+        con.close()
+
+
+def _dias_uteis_desde(inicio):
+    """Dias uteis de inicio ate hoje, contando hoje. Fim de semana nao conta
+    porque nao se dispara nele -- contar daria salto de teto sem envio."""
+    hoje = date.today()
+    if inicio > hoje:
+        return 1
+    n, d = 0, inicio
+    while d <= hoje:
+        if d.weekday() < 5:
+            n += 1
+        d += timedelta(days=1)
+    return max(n, 1)
+
+
+def inicio_aquecimento():
+    """Data em que o numero comecou a aquecer. Grava na primeira consulta, e
+    nao na instalacao: contar desde antes do primeiro disparo daria teto alto
+    para um numero que nunca mandou nada."""
+    bruto = (ajuste("aquecimento_inicio") or "").strip()
+    if bruto:
+        try:
+            return date.fromisoformat(bruto)
+        except ValueError:
+            pass
+    hoje = date.today()
+    gravar_ajustes({"aquecimento_inicio": hoje.isoformat()})
+    return hoje
+
+
+def teto_do_dia():
+    """(teto, dia_util). Teto 0 significa sem limite."""
+    if not ajuste_liga("aquecimento"):
+        return 0, 0
+    dia = _dias_uteis_desde(inicio_aquecimento())
+    for limite, teto in CURVA_AQUECIMENTO:
+        if dia <= limite:
+            return teto, dia
+    return TETO_AQUECIDO, dia
+
+
+def enviados_hoje():
+    """Quantos sairam hoje, somando todas as campanhas.
+
+    O teto e do numero, nao da campanha: duas campanhas no mesmo dia dividem
+    o mesmo teto, senao o limite nao limitaria nada.
+    """
+    con = _con()
+    try:
+        return con.execute(
+            "SELECT count(*) AS n FROM envio WHERE quando >= ? AND status <> ?",
+            (date.today().isoformat(), NA_FILA)).fetchone()["n"]
+    finally:
+        con.close()
+
+
+def dentro_da_janela(agora=None):
+    """(pode_enviar, motivo). Mensagem comercial fora de hora gera denuncia,
+    e denuncia e o que derruba o numero."""
+    agora = agora or datetime.now()
+    if ajuste_liga("so_dias_uteis") and agora.weekday() >= 5:
+        return False, "fim de semana"
+    ini, fim = ajuste_int("janela_inicio"), ajuste_int("janela_fim")
+    if ini == fim:
+        return True, ""
+    if not (ini <= agora.hour < fim):
+        return False, f"fora do horario ({ini}h as {fim}h)"
+    return True, ""
+
+
+def pode_enviar_agora():
+    """(pode, motivo) juntando janela e teto do dia."""
+    ok, motivo = dentro_da_janela()
+    if not ok:
+        return False, motivo
+    teto, _ = teto_do_dia()
+    if teto and enviados_hoje() >= teto:
+        return False, f"teto de {teto} do dia atingido"
+    return True, ""
+
+
+def situacao_aquecimento():
+    """O que a tela mostra sobre o aquecimento do numero."""
+    teto, dia = teto_do_dia()
+    hoje = enviados_hoje()
+    pode, motivo = pode_enviar_agora()
+    return {
+        "ligado": ajuste_liga("aquecimento"),
+        "inicio": inicio_aquecimento().isoformat(),
+        "dia": dia, "teto": teto, "hoje": hoje,
+        "restam_hoje": max(teto - hoje, 0) if teto else None,
+        "pode": pode, "motivo": motivo,
+        "janela": f"{ajuste_int('janela_inicio')}h as {ajuste_int('janela_fim')}h",
+        "so_dias_uteis": ajuste_liga("so_dias_uteis"),
+        "freio_erros": ajuste_int("freio_erros"),
+    }
 
 
 # ------------------------------------------------------------ opt-out
@@ -571,6 +728,32 @@ def _marcar(envio_id, status, msg_id="", erro=""):
     con.close()
 
 
+_erros_seguidos = {"n": 0}
+
+
+def _contar_erro(camp_id, usuario=""):
+    """Pausa a campanha depois de N erros em sequencia.
+
+    Sequencia de falhas e o sinal mais precoce de que o numero esta sendo
+    marcado -- ou de que a lista esta ruim. Sem o freio, a fila continua
+    batendo ate o fim e transforma um problema de 10 envios num de mil.
+
+    O contador zera a cada envio que da certo: erro espalhado e normal
+    (numero que nao existe), erro em sequencia nao e.
+    """
+    limite = ajuste_int("freio_erros")
+    _erros_seguidos["n"] += 1
+    if limite <= 0 or _erros_seguidos["n"] < limite:
+        return False
+    _erros_seguidos["n"] = 0
+    _mudar_estado(camp_id, PAUSADA,
+                  erro=f"Pausada sozinha: {limite} erros em sequencia. "
+                       f"Confira a conexao no DigiSac e os numeros da lista.")
+    auditoria.registrar(auditoria.DISPARO_PAUSADO, usuario="automatico",
+                        campanha=camp_id, motivo=f"{limite} erros seguidos")
+    return True
+
+
 def _fechar_se_acabou(camp_id):
     con = _con()
     resta = con.execute("SELECT count(*) n FROM envio WHERE campanha_id=? "
@@ -587,6 +770,14 @@ def _passo():
     if not item:
         return False
 
+    # Janela de horario e teto do dia sao checados AQUI, e nao ao iniciar a
+    # campanha: ela roda por horas e atravessa o fim do horario comercial. A
+    # campanha fica 'rodando' e simplesmente nao consome a fila -- retoma
+    # sozinha quando a janela abre ou o dia vira.
+    pode, _motivo = pode_enviar_agora()
+    if not pode:
+        return False
+
     if esta_bloqueado(item["numero"]):
         _marcar(item["id"], PULADO, erro="opt-out")
         return False                      # nao gastou envio, nao espera
@@ -595,9 +786,12 @@ def _passo():
     try:
         msg_id = digisac.enviar(item["numero"], texto)
         _marcar(item["id"], ENVIADO, msg_id=msg_id or "")
+        _erros_seguidos["n"] = 0          # deu certo: zera o freio
     except digisac.ErroDigiSac as e:
         if e.definitivo:
             _marcar(item["id"], ERRO, erro=str(e))
+            if _contar_erro(item["camp"]):
+                return False              # pausou: nao espera o intervalo
         else:
             # Falha de rede nao queima o destino: fica na fila para a proxima
             # volta. O que nao pode e girar rapido em cima do erro.
@@ -625,10 +819,22 @@ def _laco():
             time.sleep(random.uniform(config.DISPARO_PAUSA_MIN,
                                       config.DISPARO_PAUSA_MAX))
         else:
-            # Nada na fila: dorme ate alguem iniciar campanha. O timeout
-            # existe para religar sozinho se um evento se perder.
-            _acordar.wait(timeout=30)
+            # Nada para fazer agora. Dorme ate alguem iniciar campanha, ou
+            # ate a janela reabrir.
+            #
+            # Espera em fatias de 5 minutos e nao ate o horario exato: teto e
+            # janela mudam pelo painel, e uma espera longa deixaria a mudanca
+            # sem efeito ate o dia seguinte.
+            _acordar.wait(timeout=300 if _tem_fila_esperando() else 30)
             _acordar.clear()
+
+
+def _tem_fila_esperando():
+    """Existe campanha rodando com fila, mas travada por janela ou teto?"""
+    try:
+        return bool(_proximo()) and not pode_enviar_agora()[0]
+    except Exception:
+        return False
 
 
 def iniciar_worker():

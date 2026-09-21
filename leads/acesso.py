@@ -390,6 +390,7 @@ def master():
         digisac_ok=digisac.configurado(),
         digisac_teste=session.pop("digisac_teste", None),
         webhook_eventos=campanha.listar_brutos(10),
+        aquecimento=campanha.situacao_aquecimento(),
         env_arquivo=str(config.ARQUIVO_ENV),
         env_existe=config.ARQUIVO_ENV.is_file(),
         env_carregadas=config.contar_env(),
@@ -480,6 +481,45 @@ def master_digisac_conexoes():
     except digisac.ErroDigiSac as e:
         session["digisac_conexoes"] = None
         session["digisac_teste"] = {"ok": False, "mensagem": str(e)}
+    return redirect(url_for("acesso.master"))
+
+
+@bp.route("/master/disparo/ajustes", methods=["POST"])
+@exigir_master
+def master_disparo_ajustes():
+    """Freios do disparo: aquecimento, janela de horario e freio por erro.
+
+    Ficam aqui e nao na campanha porque sao propriedade do NUMERO. Por
+    campanha, a segunda comecaria a aquecer do zero de novo -- mesmo com o
+    chip mandando 500 por dia ha um mes.
+    """
+    conferir_csrf()
+    f = request.form
+    valores = {
+        "aquecimento": "1" if f.get("aquecimento") else "0",
+        "so_dias_uteis": "1" if f.get("so_dias_uteis") else "0",
+    }
+    for campo in ("janela_inicio", "janela_fim", "freio_erros"):
+        v = (f.get(campo) or "").strip()
+        if v.isdigit():
+            valores[campo] = v
+    inicio = (f.get("aquecimento_inicio") or "").strip()
+    if inicio:
+        valores["aquecimento_inicio"] = inicio
+
+    ini = int(valores.get("janela_inicio", campanha.ajuste_int("janela_inicio")))
+    fim = int(valores.get("janela_fim", campanha.ajuste_int("janela_fim")))
+    if ini >= fim:
+        session["aviso_master"] = ("Horario invalido: o inicio da janela tem de "
+                                   "ser menor que o fim. Nada foi alterado.")
+        return redirect(url_for("acesso.master"))
+
+    campanha.gravar_ajustes(valores)
+    session["aviso_master"] = "Ajustes de disparo salvos."
+    auditoria.registrar(
+        auditoria.DISPARO_AJUSTADO,
+        usuario=(usuario_atual() or {}).get("usuario", ""), ip=_ip(),
+        **{k: v for k, v in valores.items()})
     return redirect(url_for("acesso.master"))
 
 

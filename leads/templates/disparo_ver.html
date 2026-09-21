@@ -57,6 +57,27 @@
     </div>
   {% endif %}
 
+  {# Campanha "rodando" que nao anda confunde: sem esta linha parece
+     travada, e a pessoa pausa e reinicia sem precisar. #}
+  {% if c.estado == 'rodando' and not aquecimento.pode %}
+    <div class="alerta alerta-aviso" style="margin-top:16px">
+      <strong>Em espera:</strong> {{ aquecimento.motivo }}. A campanha
+      continua ativa e retoma sozinha — não precisa fazer nada.
+      {% if aquecimento.ligado %}
+        Teto de hoje: {{ aquecimento.teto }}, já saíram {{ aquecimento.hoje }}.
+      {% endif %}
+    </div>
+  {% elif c.estado == 'rodando' and aquecimento.ligado and aquecimento.restam_hoje is not none %}
+    <p class="dica" style="margin-top:14px">
+      Aquecimento: {{ aquecimento.hoje }} de {{ aquecimento.teto }} hoje
+      &middot; {{ aquecimento.restam_hoje }} restantes antes de parar até amanhã.
+    </p>
+  {% endif %}
+
+  {% if c.erro %}
+    <div class="alerta alerta-erro" style="margin-top:16px">{{ c.erro }}</div>
+  {% endif %}
+
   {% if c.estado == 'rascunho' %}
     <div class="alerta alerta-aviso" style="margin-top:16px">
       Confira a mensagem abaixo antes de iniciar. Depois do primeiro envio não
