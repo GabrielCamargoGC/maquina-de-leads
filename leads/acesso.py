@@ -504,6 +504,7 @@ def master_disparo_ajustes():
     valores = {
         "aquecimento": "1" if f.get("aquecimento") else "0",
         "so_dias_uteis": "1" if f.get("so_dias_uteis") else "0",
+        "validar_numero": "1" if f.get("validar_numero") else "0",
     }
     for campo in ("janela_inicio", "janela_fim", "freio_erros"):
         v = (f.get(campo) or "").strip()

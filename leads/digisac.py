@@ -485,15 +485,89 @@ def reiniciar_conexao():
     if not configurado():
         raise ErroDigiSac("DigiSac nao configurado", definitivo=True)
     ident = config.DIGISAC_SERVICE_ID
-    ultimo = None
-    for caminho in (f"/services/{ident}/restart",
-                    f"/connections/{ident}/restart"):
+    # Varios caminhos porque "Route not found" indica que esta conta ou
+    # versao nao expoe /restart, e o nome varia entre servico e conexao.
+    # Ordem: reiniciar (menos invasivo) antes de start/shutdown.
+    tentativas = (
+        ("POST", f"/services/{ident}/restart"),
+        ("POST", f"/service/{ident}/restart"),
+        ("POST", f"/connections/{ident}/restart"),
+        ("POST", f"/connection/{ident}/restart"),
+        ("POST", f"/services/{ident}/start"),
+        ("POST", f"/connections/{ident}/start"),
+    )
+    erros = []
+    for metodo, caminho in tentativas:
         try:
-            _chamar(caminho, corpo={})
-            return True
+            _chamar(caminho, corpo={}, metodo=metodo)
+            return caminho
         except ErroDigiSac as e:
-            ultimo = e
-    raise ultimo or ErroDigiSac("nao consegui reiniciar", definitivo=True)
+            erros.append(f"{caminho}: {e}")
+    raise ErroDigiSac(
+        "nenhum caminho de reinicio respondeu nesta conta. Reinicie pelo "
+        "painel do DigiSac (tres pontinhos na conexao). Tentei: "
+        + " | ".join(erros[:3]), definitivo=True)
+
+
+def tem_whatsapp(numeros):
+    """{numero: True/False/None} -- quais desses numeros tem WhatsApp.
+
+    Usa GET /contacts/exists, que e a checagem que o proprio DigiSac expoe.
+    Perguntar antes de mandar vale muito aqui: o campo TELEFONE da Receita
+    guarda 8 digitos e o nono e reconstruido por inferencia (a regra da
+    Anatel), entao parte dos numeros da base simplesmente nao existe. Numero
+    inexistente nao devolve erro no envio -- o DigiSac cria a conversa,
+    aceita a mensagem e a deixa pendente para sempre.
+
+    None = nao deu para saber. Nesse caso o numero SEGUE para a fila: e
+    melhor gastar um envio do que descartar um lead por causa de um endpoint
+    que nao respondeu.
+    """
+    fora = {}
+    if not configurado():
+        return {n: None for n in numeros}
+
+    for numero in numeros:
+        n = "".join(c for c in str(numero or "") if c.isdigit())
+        if not n:
+            fora[numero] = None
+            continue
+        resposta = None
+        for caminho in (f"/contacts/exists?serviceId={config.DIGISAC_SERVICE_ID}"
+                        f"&contactNumber={n}",
+                        f"/contacts/exists?serviceId={config.DIGISAC_SERVICE_ID}"
+                        f"&number={n}"):
+            try:
+                resposta = _chamar(caminho, metodo="GET")
+                break
+            except ErroDigiSac:
+                continue
+        if resposta is None:
+            fora[numero] = None
+            continue
+        fora[numero] = _existe_na_resposta(resposta)
+    return fora
+
+
+def _existe_na_resposta(r):
+    """Le o "existe?" da resposta sem depender do nome exato do campo."""
+    if isinstance(r, bool):
+        return r
+    if not isinstance(r, dict):
+        return None
+    for chave in ("exists", "valid", "validNumber", "isValid", "hasWhatsapp"):
+        v = _cavar(r, (chave,))
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str) and v.lower() in ("true", "false"):
+            return v.lower() == "true"
+    # Algumas versoes devolvem o contato quando existe e vazio quando nao.
+    if _cavar(r, ("id", "contactId")):
+        return True
+    dados = r.get("data")
+    if isinstance(dados, list):
+        return bool(dados)
+    return None
 
 
 # ------------------------------------------------------------ webhook

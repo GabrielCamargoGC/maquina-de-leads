@@ -157,6 +157,7 @@ PADROES = {
     "janela_fim": "18",
     "so_dias_uteis": "1",
     "freio_erros": "10",
+    "validar_numero": "1",
 }
 
 
@@ -291,6 +292,7 @@ def situacao_aquecimento():
         "janela": f"{ajuste_int('janela_inicio')}h as {ajuste_int('janela_fim')}h",
         "so_dias_uteis": ajuste_liga("so_dias_uteis"),
         "freio_erros": ajuste_int("freio_erros"),
+        "validar_numero": ajuste_liga("validar_numero"),
     }
 
 
@@ -945,6 +947,22 @@ def _passo():
     if esta_bloqueado(item["numero"]):
         _marcar(item["id"], PULADO, erro="opt-out")
         return False                      # nao gastou envio, nao espera
+
+    # Pergunta ao DigiSac se o numero tem WhatsApp antes de gastar o envio.
+    #
+    # Vale muito nesta base: o campo TELEFONE da Receita guarda 8 digitos e o
+    # nono e reconstruido por inferencia, entao parte dos numeros nao existe.
+    # E numero inexistente nao devolve erro no envio -- o DigiSac cria a
+    # conversa, aceita a mensagem e a deixa pendente para sempre, o que
+    # polui a taxa de entrega e parece problema de conexao.
+    #
+    # None (endpoint indisponivel) segue para o envio: melhor gastar uma
+    # mensagem do que descartar um lead por causa de uma checagem que falhou.
+    if ajuste_liga("validar_numero") and digisac.configurado():
+        existe = digisac.tem_whatsapp([item["numero"]]).get(item["numero"])
+        if existe is False:
+            _marcar(item["id"], ERRO, erro="o numero nao tem WhatsApp")
+            return False                  # nao gastou envio, nao espera
 
     texto = montar_mensagem(item["mensagem"], item["nome"])
     try:

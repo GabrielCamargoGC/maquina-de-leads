@@ -262,6 +262,14 @@
         <input type="checkbox" name="so_dias_uteis"
           {{ 'checked' if aquecimento.so_dias_uteis }}> Só dias de semana
       </label>
+      {# Confere no WhatsApp antes de gastar o envio. Numero inexistente nao
+         devolve erro: o DigiSac cria a conversa e deixa a mensagem pendente
+         para sempre, o que suja a entrega e parece falha de conexao. #}
+      <label class="toggle">
+        <input type="checkbox" name="validar_numero"
+          {{ 'checked' if aquecimento.validar_numero }}>
+        Conferir se o número tem WhatsApp
+      </label>
     </div>
     <p class="dica">
       Aquecendo: 50/dia nos 3 primeiros dias úteis, 100 até o 7º, 250 até o
