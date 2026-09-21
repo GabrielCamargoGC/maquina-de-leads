@@ -113,16 +113,70 @@ def e_queda_de_conexao(mensagem):
     return any(s in m for s in SINAIS_DE_QUEDA)
 
 
+def estado_conexao():
+    """(conectado, detalhe) da conexao de WhatsApp que envia.
+
+    Existe porque o POST /messages NAO falha quando o chip esta fora: o
+    DigiSac aceita a mensagem e a deixa na fila dele, com o relogio ao lado
+    na tela de conversas. Do nosso lado parece envio bem-sucedido, e uma
+    campanha inteira pode ser despejada numa fila que nao anda.
+
+    conectado None = nao deu para saber (caminho desconhecido na API). Nesse
+    caso quem chama deve seguir, e nao bloquear: melhor arriscar o envio do
+    que travar o disparo por causa de um endpoint que nao achamos.
+    """
+    if not configurado():
+        return False, "DigiSac nao configurado"
+
+    ident = config.DIGISAC_SERVICE_ID
+    for caminho in (f"/connections/{ident}", f"/services/{ident}"):
+        try:
+            r = _chamar(caminho, metodo="GET")
+        except ErroDigiSac:
+            continue
+        if not isinstance(r, dict):
+            continue
+        dados = r.get("data") if isinstance(r.get("data"), dict) else r
+        if _caiu_a_conexao(dados):
+            return False, "o numero esta desconectado do WhatsApp"
+        conectado = _cavar(dados, ("isconnected", "isConnected"))
+        if conectado is True:
+            return True, "numero conectado"
+        estado = _cavar(dados, ("state", "status"))
+        if isinstance(estado, str) and estado:
+            baixo = estado.lower()
+            if baixo in ("connected", "normal", "online", "open"):
+                return True, f"numero {baixo}"
+            return False, f"conexao em estado '{estado}'"
+    return None, "nao foi possivel ler o estado da conexao"
+
+
 def testar():
-    """(ok, mensagem). Serve para a tela dizer se as credenciais prestam
-    ANTES de comecar uma campanha de horas."""
+    """(ok, mensagem) para a tela mostrar ANTES de uma campanha de horas.
+
+    Testa as DUAS coisas. So o token respondia antes, e isso dizia
+    "Conectado" com o chip fora do WhatsApp -- a pior resposta possivel,
+    porque da confianca para iniciar uma campanha que vai so encher a fila
+    do DigiSac.
+    """
     if not configurado():
         return False, "Faltam DIGISAC_SUBDOMINIO, DIGISAC_TOKEN ou DIGISAC_SERVICE_ID no .env"
     try:
         _chamar("/contacts?perPage=1", metodo="GET")
-        return True, "Conectado"
     except ErroDigiSac as e:
         return False, str(e)
+
+    conectado, detalhe = estado_conexao()
+    if conectado is False:
+        return False, (f"Token e subdominio certos, mas {detalhe}. "
+                       f"Reconecte o numero no painel do DigiSac (vai pedir o "
+                       f"QR) -- sem isso a mensagem entra na fila deles e nao "
+                       f"sai.")
+    if conectado is None:
+        return True, ("Token e subdominio certos. Nao consegui conferir se o "
+                      "numero esta conectado ao WhatsApp -- confira no painel "
+                      "do DigiSac antes de uma campanha grande.")
+    return True, "Conectado, e o numero esta online no WhatsApp"
 
 
 # Onde a lista de conexoes pode estar. O produto chama de "conexao" na tela

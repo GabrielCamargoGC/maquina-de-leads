@@ -464,7 +464,7 @@ def iniciar(ident, usuario=""):
         return
     ok, msg = digisac.testar()
     if not ok:
-        raise ValueError(f"DigiSac nao respondeu: {msg}")
+        raise ValueError(msg)
     _mudar_estado(ident, RODANDO,
                   iniciada_em=datetime.now().isoformat(timespec="seconds"))
     auditoria.registrar(auditoria.DISPAROU, usuario=usuario,
@@ -736,6 +736,7 @@ def _marcar(envio_id, status, msg_id="", erro=""):
 
 
 _erros_seguidos = {"n": 0}
+_conta_passos = {"n": 0}
 
 
 def _contar_erro(camp_id, usuario=""):
@@ -859,6 +860,20 @@ def _passo():
     pode, _motivo = pode_enviar_agora()
     if not pode:
         return False
+
+    # Confere a conexao antes de mandar, de vez em quando.
+    #
+    # O POST /messages nao falha com o chip fora -- o DigiSac aceita e
+    # enfileira. Sem esta checagem, uma campanha de 184 despeja tudo numa
+    # fila que nao anda e a tela mostra "enviado" para mensagem que nunca
+    # saiu. Uma vez a cada 20 envios: perguntar a cada envio dobraria as
+    # chamadas a API sem ganho.
+    if _conta_passos["n"] % 20 == 0:
+        conectado, detalhe = digisac.estado_conexao()
+        if conectado is False:
+            pausar_por_queda(item["camp"], detalhe)
+            return False
+    _conta_passos["n"] += 1
 
     if esta_bloqueado(item["numero"]):
         _marcar(item["id"], PULADO, erro="opt-out")

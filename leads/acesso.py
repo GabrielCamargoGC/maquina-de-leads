@@ -391,6 +391,8 @@ def master():
         digisac_teste=session.pop("digisac_teste", None),
         webhook_eventos=campanha.listar_brutos(10),
         aquecimento=campanha.situacao_aquecimento(),
+        conexao=digisac.estado_conexao() if digisac.configurado()
+                else (False, "nao configurado"),
         env_arquivo=str(config.ARQUIVO_ENV),
         env_existe=config.ARQUIVO_ENV.is_file(),
         env_carregadas=config.contar_env(),

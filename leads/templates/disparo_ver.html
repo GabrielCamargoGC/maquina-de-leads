@@ -164,7 +164,18 @@
     {% endif %}
   </div>
 
-  {% if rel.sem_confirmacao %}
+  {% if rel.sem_confirmacao and rel.sem_confirmacao > 10 %}
+    {# Muito "sem confirmacao" junto quase sempre e chip fora, e nao webhook
+       mudo: o DigiSac aceitou e enfileirou sem conseguir entregar. #}
+    <div class="alerta alerta-erro" style="margin-top:18px">
+      <strong>{{ rel.sem_confirmacao|milhar }} saíram sem nenhuma confirmação.</strong>
+      Em bloco, isso quase sempre é a conexão do WhatsApp fora do ar: o
+      DigiSac aceita a mensagem e deixa na fila dele, e na tela de conversas
+      ela aparece com um relógio em vez dos tiques. Confira a conexão em
+      <a href="/master">Master</a> e reconecte o número se for o caso — as
+      que estão na fila do DigiSac saem sozinhas quando ele voltar.
+    </div>
+  {% elif rel.sem_confirmacao %}
     {# "Sem confirmacao" NAO e "nao chegou". Precisa estar escrito assim, ou
        a leitura natural e "minhas mensagens nao foram entregues" -- e no
        WhatsApp do celular elas estao la, com dois tiques. #}

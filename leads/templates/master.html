@@ -161,6 +161,27 @@
     </div>
   </form>
 
+  {# Estado do chip, separado do estado do token.
+     O POST /messages nao falha com o numero fora do WhatsApp: o DigiSac
+     aceita e enfileira. Entao "token ok" nao e "da para disparar", e essa
+     confusao ja custou 144 destinos numa fila que nao andava. #}
+  <div class="alerta {{ 'alerta-ok' if conexao[0] else
+                        ('alerta-aviso' if conexao[0] is none else 'alerta-erro') }}"
+       style="margin-top:14px">
+    <strong>Conexão do WhatsApp:</strong>
+    {% if conexao[0] %}
+      online — dá para disparar.
+    {% elif conexao[0] is none %}
+      não consegui verificar ({{ conexao[1] }}). Confira no painel do DigiSac
+      antes de uma campanha grande.
+    {% else %}
+      <strong>{{ conexao[1] }}</strong>. Reconecte o número no painel do
+      DigiSac — vai pedir o QR. Enquanto estiver assim, a mensagem entra na
+      fila deles e não sai, e na tela de conversas aparece com um relógio ao
+      lado em vez dos tiques.
+    {% endif %}
+  </div>
+
   {# Freios do disparo. Ficam aqui e nao na campanha porque sao propriedade
      do NUMERO: por campanha, a segunda comecaria a aquecer do zero de novo. #}
   <h3 style="margin:24px 0 10px;font-size:15px">Aquecimento e freios</h3>
