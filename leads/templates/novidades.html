@@ -32,6 +32,12 @@
           <button type="submit" name="formato" value="xlsx" class="primario">Baixar Excel</button>
           <button type="submit" name="formato" value="csv" class="secundario">Baixar CSV</button>
         </form>
+        {# Disparo tambem daqui. Empresa que abriu esta semana e o lead mais
+           quente que existe nesta base, e era o unico lugar sem o botao.
+           fonte=novidades faz a montagem da campanha usar a comparacao entre
+           as duas bases, e nao a busca normal. #}
+        <a class="botao secundario"
+           href="{{ url_for('disparo_nova', fonte='novidades', **query) }}">Disparar</a>
         {% endif %}
       </div>
       {% if aproximado %}
