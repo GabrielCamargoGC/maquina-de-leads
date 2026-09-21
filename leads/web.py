@@ -530,10 +530,12 @@ def disparo_nova():
         destinos, resumo = campanha.levantar_destinos(filtros, fonte)
         ctx["resumo"] = resumo
         ctx["segundos"] = campanha.tempo_estimado(resumo["vao_receber"])
-        # Tres nomes de verdade para a previa. Nome de empresa da Receita
-        # tem cada coisa, e "Olá MERCADO SAO JOSE LTDA ME" numa mensagem se
-        # denuncia na primeira linha -- melhor ver antes de mandar.
-        ctx["exemplos"] = [n for n, _ in destinos[:3] if n]
+        # Tres nomes de verdade do resultado, nas duas formas. Nome da Receita
+        # tem cada coisa -- MEI vem com o CNPJ na frente -- e "Ola 23.275.443
+        # ELUIZA..." numa mensagem se denuncia na primeira linha. Ver antes
+        # custa um olhar; ver depois custa a campanha.
+        ctx["exemplos"] = [(n, n.split()[0] if n.split() else "")
+                           for n, _ in destinos[:3] if n]
     except busca.ErroBusca as e:
         ctx["erro"] = str(e)
         return render_template("disparo_nova.html", **ctx)

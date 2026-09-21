@@ -257,12 +257,22 @@ def tempo_estimado(quantos):
 
 
 def montar_mensagem(modelo, nome):
-    """Troca {nome} pelo nome da empresa.
+    """Troca {nome} e {primeiro} no texto da mensagem.
 
-    Sem variavel, mil pessoas recebem texto identico no mesmo dia -- que e o
-    que o WhatsApp mede para decidir que aquilo e disparo em massa.
+    {nome}     -> "Eluiza Helena dos Reis Crepaldi"
+    {primeiro} -> "Eluiza"
+
+    Dois e nao um porque o certo depende do lead: MEI e pessoa fisica e
+    primeiro nome soa humano; empresa com nome fantasia quer o nome todo.
+    Quem escreve a mensagem sabe qual dos dois esta buscando.
+
+    Sem variavel nenhuma, mil pessoas recebem texto identico no mesmo dia --
+    que e o que o WhatsApp mede para decidir que aquilo e disparo em massa.
     """
-    return (modelo or "").replace("{nome}", nome or "").strip()
+    texto = (modelo or "")
+    nome = nome or ""
+    return (texto.replace("{primeiro}", nome.split()[0] if nome.split() else "")
+                 .replace("{nome}", nome).strip())
 
 
 # ------------------------------------------------------------ controle

@@ -163,34 +163,73 @@ def para_disparo_par(ddd1, tel1, ddd2, tel2):
     return numero if e_celular(tipo) else ""
 
 
-def nome_curto(razao_social, nome_fantasia=None, limite=40):
-    """Nome que vai na mensagem, no lugar da razao social crua.
-
-    "MERCADO SAO JOSE LTDA ME" numa mensagem de WhatsApp denuncia disparo em
-    massa na primeira linha. Nome fantasia quando existe, caixa de nome
-    proprio, e sem os sufixos societarios.
-    """
+def _limpar_nome(razao_social, nome_fantasia=None):
+    """Nome sem o documento na frente e sem sufixo societario."""
     bruto = (nome_fantasia or "").strip() or (razao_social or "").strip()
     if not bruto:
         return ""
 
+    alto = bruto.upper()
+
+    # MEI vem da Receita com o CNPJ na frente do nome da pessoa:
+    # "23.275.443 ELUIZA HELENA DOS REIS CREPALDI". Numa mensagem de WhatsApp
+    # isso e o que mais denuncia lista comprada.
+    #
+    # So cai fora se o primeiro pedaco tiver 8 digitos ou mais -- e o tamanho
+    # de CPF e de raiz de CNPJ. Sem essa trava, nome de empresa que comeca
+    # com numero ("99 TAXI", "3 IRMAOS") perderia o comeco.
+    partes = alto.split(None, 1)
+    if len(partes) == 2:
+        digitos = sum(1 for c in partes[0] if c.isdigit())
+        so_documento = all(c.isdigit() or c in ".-/" for c in partes[0])
+        if digitos >= 8 and so_documento:
+            alto = partes[1].strip()
+
     sufixos = (" LTDA", " ME", " EPP", " EIRELI", " S/A", " SA", " S.A",
                " MEI", " - ME", " EIRELLI")
-    alto = bruto.upper()
     mudou = True
     while mudou:
         mudou = False
-        for s in sufixos:
-            if alto.endswith(s):
-                alto = alto[: -len(s)].rstrip(" -,.")
+        for sufixo in sufixos:
+            if alto.endswith(sufixo):
+                alto = alto[: -len(sufixo)].rstrip(" -,.")
                 mudou = True
 
     miudas = {"DA", "DE", "DO", "DAS", "DOS", "E"}
     palavras = []
-    for i, p in enumerate(alto.split()):
-        if i > 0 and p in miudas:
-            palavras.append(p.lower())
+    for i, palavra in enumerate(alto.split()):
+        if i > 0 and palavra in miudas:
+            palavras.append(palavra.lower())
         else:
-            palavras.append(p[:1] + p[1:].lower())
-    nome = " ".join(palavras).strip()
-    return nome[:limite].rstrip() if len(nome) > limite else nome
+            palavras.append(palavra[:1] + palavra[1:].lower())
+    return " ".join(palavras).strip()
+
+
+def nome_curto(razao_social, nome_fantasia=None, limite=40):
+    """Nome completo tratado, para a mensagem.
+
+    Corta no fim de palavra, nao no meio: "Eluiza Helena dos Reis Crepal"
+    parece erro de sistema, e erro de sistema numa mensagem de venda derruba
+    a credibilidade da mensagem inteira.
+    """
+    nome = _limpar_nome(razao_social, nome_fantasia)
+    if len(nome) <= limite:
+        return nome
+
+    corte = nome[:limite]
+    if " " in corte:
+        corte = corte[:corte.rindex(" ")]
+    return corte.rstrip(" -,.")
+
+
+def primeiro_nome(razao_social, nome_fantasia=None):
+    """So o primeiro nome. "Ola Eluiza" soa humano; "Ola Eluiza Helena dos
+    Reis Crepaldi" soa banco de dados.
+
+    Vale principalmente para MEI, onde a razao social e o nome da pessoa.
+    Para empresa devolve a primeira palavra, que as vezes serve ("Padaria")
+    e as vezes nao -- por isso quem escolhe e quem escreve a mensagem, pelo
+    {primeiro} ou {nome}.
+    """
+    nome = _limpar_nome(razao_social, nome_fantasia)
+    return nome.split()[0] if nome else ""

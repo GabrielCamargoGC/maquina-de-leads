@@ -91,16 +91,31 @@
       <textarea class="entrada" id="mensagem" name="mensagem" rows="6"
                 required placeholder="Olá {nome}, tudo bem?">{{ mensagem }}</textarea>
       <span class="dica">
-        <code>{nome}</code> vira o nome da empresa. Use — texto idêntico para
-        centenas de números é o que o WhatsApp mede para decidir que é disparo
-        em massa.
+        <code>{primeiro}</code> vira só o primeiro nome &middot;
+        <code>{nome}</code> vira o nome completo. Use uma das duas — texto
+        idêntico para centenas de números é o que o WhatsApp mede para decidir
+        que é disparo em massa.
       </span>
     </div>
 
     {% if exemplos %}
+      {# As duas formas lado a lado, com nomes reais do resultado. Escolher
+         entre {primeiro} e {nome} no abstrato e chute; vendo, e obvio. #}
       <div class="alerta alerta-info" style="margin-top:14px">
-        <strong>Como o nome vai sair:</strong>
-        {% for e in exemplos %}<code>{{ e }}</code>{% if not loop.last %} · {% endif %}{% endfor %}
+        <table style="margin:0">
+          <tbody>
+            <tr>
+              <td style="padding:2px 14px 2px 0"><code>{primeiro}</code></td>
+              <td>{% for completo, prim in exemplos %}{{ prim }}{% if not loop.last %}
+                  &middot; {% endif %}{% endfor %}</td>
+            </tr>
+            <tr>
+              <td style="padding:2px 14px 2px 0"><code>{nome}</code></td>
+              <td>{% for completo, prim in exemplos %}{{ completo }}{% if not loop.last %}
+                  &middot; {% endif %}{% endfor %}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     {% endif %}
 
