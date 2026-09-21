@@ -516,6 +516,7 @@ def disparo_nova():
     fonte = (request.values.get("fonte") or "busca").strip()
     ctx = dict(_comum("disparo"), f=f, query=f.query(), fonte=fonte,
                erro=None, resumo=None, total=None, exemplos=[],
+               aproximado=False,
                nome=request.values.get("nome", ""),
                mensagem=request.values.get("mensagem", ""),
                digisac_ok=digisac.configurado(), segundos=0)
@@ -526,7 +527,16 @@ def disparo_nova():
 
     try:
         filtros = f.para_busca()
-        ctx["total"] = busca.contar(filtros)
+        # A contagem TEM de vir da mesma fonte que os destinos. Com
+        # busca.contar para fonte=novidades a tela dizia "9.045 encontradas"
+        # onde a aba de Empresas novas mostrou 213: a busca normal conta todo
+        # MEI da cidade, e nao so quem abriu desde a base anterior. O numero
+        # de baixo estava certo e o de cima nao, que e a pior combinacao --
+        # parece que o filtro se perdeu.
+        if fonte == "novidades":
+            ctx["total"], ctx["aproximado"] = novidades.contar_novas(filtros)
+        else:
+            ctx["total"] = busca.contar(filtros)
         destinos, resumo = campanha.levantar_destinos(filtros, fonte)
         ctx["resumo"] = resumo
         ctx["segundos"] = campanha.tempo_estimado(resumo["vao_receber"])

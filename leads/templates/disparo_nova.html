@@ -28,7 +28,18 @@
 
   <div class="card">
     <h2>1. Quem vai receber</h2>
-    <p class="dica">{{ f.descricao() }}</p>
+    <p class="dica">
+      {{ f.descricao() }}
+      {% if fonte == 'novidades' %}
+        &middot; só quem abriu desde a base anterior
+      {% endif %}
+    </p>
+    {% if aproximado %}
+      <div class="alerta alerta-aviso" style="margin-top:10px">
+        Esta máquina só tem uma versão da base, então não há com o que
+        comparar: a lista é de quem abriu nos últimos 6 meses.
+      </div>
+    {% endif %}
 
     {# A conta aberta, e nao so o numero final. Quem dispara precisa ver
        onde os leads se perderam: sem celular na base e opt-out sao motivos
@@ -36,7 +47,12 @@
     <table style="margin-top:14px;max-width:420px">
       <tbody>
         <tr>
-          <td class="fantasia">Empresas encontradas</td>
+          {# O rotulo diz de onde a lista saiu. "Encontradas" numa lista de
+             novidades faria a pessoa comparar com o numero da busca normal,
+             que e outro. #}
+          <td class="fantasia">
+            {% if fonte == 'novidades' %}Empresas novas{% else %}Empresas encontradas{% endif %}
+          </td>
           <td style="text-align:right">{{ total|milhar }}</td>
         </tr>
         <tr>
