@@ -456,6 +456,20 @@ FLAGS_DESPACHO = ("isConnected", "isWebConnected", "isPhoneConnected",
                   "isWebSyncing", "mode", "state", "disconnectedAt")
 
 
+def _achar_dicionario(d, chave, profundidade=4):
+    """Acha um sub-dicionario por nome, em qualquer nivel."""
+    if not isinstance(d, dict) or profundidade < 0:
+        return None
+    if isinstance(d.get(chave), dict):
+        return d[chave]
+    for v in d.values():
+        if isinstance(v, dict):
+            achado = _achar_dicionario(v, chave, profundidade - 1)
+            if achado is not None:
+                return achado
+    return None
+
+
 def diagnostico_conexao():
     """Os flags reais da conexao, e nao so o verde do painel.
 
@@ -477,6 +491,11 @@ def diagnostico_conexao():
             break
     if bruto is None:
         return ["nao consegui ler o estado da conexao"], {}
+
+    # O cru vai junto: quando o diagnostico nao acha um campo, a unica forma
+    # de saber se ele nao existe ou se esta em outro lugar e olhando o que
+    # o DigiSac respondeu de fato.
+    cru = json.dumps(bruto, ensure_ascii=False)[:4000]
 
     status = bruto.get("status") if isinstance(bruto.get("status"), dict) else bruto
     if not isinstance(status, dict):
@@ -512,7 +531,11 @@ def diagnostico_conexao():
                      "a mensagem sair da API e nunca receber confirmacao")
 
     # settings tambem interessam: o DigiSac pode estar retendo envio ativo.
-    ajustes = bruto.get("settings") if isinstance(bruto.get("settings"), dict) else {}
+    #
+    # Procura em profundidade: a resposta de /services/{id} nem sempre traz
+    # settings na raiz, e ler so de bruto["settings"] fazia o diagnostico
+    # dizer "nao consegui ler as regras" para uma conta que respondeu.
+    ajustes = _achar_dicionario(bruto, "settings") or {}
     for nome, recado in (
             ("blockMessageRulesActive",
              "as regras de bloqueio de mensagem estao ativas nesta conexao"),
@@ -528,6 +551,7 @@ def diagnostico_conexao():
         if valor is True:
             ruins.append(recado)
 
+    flags["_cru"] = cru
     return ruins, flags
 
 

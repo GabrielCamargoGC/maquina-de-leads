@@ -302,8 +302,16 @@
     <details style="margin-top:10px">
       <summary style="cursor:pointer;color:var(--texto-3);font-size:13px">
         Flags da conexao ({{ diagnostico[1]|length }})</summary>
-      <pre style="white-space:pre-wrap;font-size:11.5px;margin:6px 0 0">{% for k, v in diagnostico[1].items() %}{{ k }}: {{ v }}
-{% endfor %}</pre>
+      <pre style="white-space:pre-wrap;font-size:11.5px;margin:6px 0 0">{% for k, v in diagnostico[1].items() %}{% if k != '_cru' %}{{ k }}: {{ v }}
+{% endif %}{% endfor %}</pre>
+      {% if diagnostico[1]._cru %}
+        <p class="dica" style="margin-top:10px">
+          Resposta crua de <code>/services/&lt;id&gt;</code> — é o que o
+          DigiSac devolveu de fato:
+        </p>
+        <pre style="white-space:pre-wrap;word-break:break-all;
+                    font-size:11px;margin:4px 0 0">{{ diagnostico[1]._cru }}</pre>
+      {% endif %}
     </details>
   {% endif %}
 
