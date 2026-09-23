@@ -464,9 +464,20 @@ def iniciar(ident, usuario=""):
         raise ValueError("Campanha nao encontrada.")
     if c["estado"] == RODANDO:
         return
-    ok, msg = digisac.testar()
-    if not ok:
-        raise ValueError(msg)
+    # Bloqueia so quando a API em si nao responde (token/subdominio errados).
+    #
+    # Antes bloqueava tambem quando estado_conexao dizia "desconectado" -- e
+    # essa leitura se provou nao confiavel: a campanha foi recusada por
+    # numero "desconectado" no mesmo minuto em que mensagens eram entregues
+    # com dois tiques. Guarda que erra sozinha e pior que guarda nenhuma,
+    # porque impede o trabalho e manda procurar problema que nao existe.
+    if not digisac.configurado():
+        raise ValueError("DigiSac nao configurado. Preencha as credenciais "
+                         "em Master.")
+    try:
+        digisac._chamar("/contacts?perPage=1", metodo="GET")
+    except digisac.ErroDigiSac as e:
+        raise ValueError(f"O DigiSac nao respondeu: {e}")
     _mudar_estado(ident, RODANDO,
                   iniciada_em=datetime.now().isoformat(timespec="seconds"))
     auditoria.registrar(auditoria.DISPAROU, usuario=usuario,
@@ -749,6 +760,14 @@ def _marcar(envio_id, status, msg_id="", erro=""):
 
 _erros_seguidos = {"n": 0}
 _conta_passos = {"n": 0}
+_quedas_seguidas = {"n": 0}
+
+# Quantas quedas de conexao seguidas antes de pausar a campanha.
+#
+# 3 e nao 1: o DigiSac devolve "Service disconnected" tambem em falha
+# passageira, e pausar na primeira parava campanha que estava entregando.
+# Nenhum destino e perdido no caminho -- todos voltam para a fila.
+MAX_QUEDAS = 3
 
 # Quantas mensagens seguidas podem ficar em ack 0 antes de pausar.
 #
@@ -1011,11 +1030,13 @@ def _passo():
     # configurado", que viraria um recado de "a conexao caiu, leia o QR" --
     # mandando a pessoa ao painel do DigiSac quando o que falta e o token.
     # Sem credencial, digisac.enviar ja falha com a mensagem certa.
-    if digisac.configurado() and _conta_passos["n"] % 20 == 0:
-        conectado, detalhe = digisac.estado_conexao()
-        if conectado is False:
-            pausar_por_queda(item["camp"], detalhe)
-            return False
+    # A checagem periodica de conexao foi removida daqui de proposito.
+    #
+    # Ela pausava a campanha quando estado_conexao dizia "desconectado", e
+    # essa leitura erra: pausou campanha que estava entregando. O que
+    # realmente prova que nao esta saindo e o ack das mensagens ja enviadas,
+    # e disso cuida _conferir_despacho -- que olha resultado, nao estado
+    # declarado.
     _conta_passos["n"] += 1
 
     if esta_bloqueado(item["numero"]):
@@ -1042,7 +1063,8 @@ def _passo():
     try:
         msg_id = digisac.enviar(item["numero"], texto)
         _marcar(item["id"], ENVIADO, msg_id=msg_id or "")
-        _erros_seguidos["n"] = 0          # deu certo: zera o freio
+        _erros_seguidos["n"] = 0          # deu certo: zera os freios
+        _quedas_seguidas["n"] = 0
 
         # A cada 5 envios, confere se o DigiSac esta despachando de verdade.
         # 200 na API nao prova entrega -- prova apenas que ele aceitou.
@@ -1050,11 +1072,21 @@ def _passo():
             return False
     except digisac.ErroDigiSac as e:
         if digisac.e_queda_de_conexao(str(e)):
-            # Chip caiu do WhatsApp. Pausa JA, sem esperar o freio de 10:
-            # o primeiro erro desses ja diz tudo, e insistir so transforma
-            # uma queda de conexao numa lista de destinos queimados.
+            # Queda de conexao: o destino SEMPRE volta para a fila, nunca e
+            # queimado. Mas a pausa exige repeticao.
+            #
+            # Pausar no primeiro erro derrubava a campanha inteira por uma
+            # falha momentanea do DigiSac -- aconteceu: campanha parada em
+            # 1 de 24 enquanto as mensagens seguiam sendo entregues. Uma
+            # queda de verdade nao se resolve sozinha e aparece de novo no
+            # proximo envio; uma piscada, nao.
             _marcar(item["id"], NA_FILA, erro=str(e))
-            pausar_por_queda(item["camp"], str(e))
+            _quedas_seguidas["n"] += 1
+            if _quedas_seguidas["n"] >= MAX_QUEDAS:
+                _quedas_seguidas["n"] = 0
+                pausar_por_queda(item["camp"], str(e))
+                return False
+            time.sleep(20)     # dá tempo de a conexao voltar
             return False
         if e.definitivo:
             _marcar(item["id"], ERRO, erro=str(e))
