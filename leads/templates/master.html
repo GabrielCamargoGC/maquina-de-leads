@@ -449,14 +449,9 @@
                                   else 'alerta-info') }}">
         {{ comparacao.recado }}
         {% if comparacao.tipo == 'bloqueado' %}
-          <br><br>
-          <strong>O que fazer:</strong> no painel do DigiSac, confira as
-          regras de bloqueio de mensagem da conexão. Se
-          <code>blockMessageRulesActive</code> estiver ligado, ele barra
-          envio conforme a regra; com <code>unblockByReceiveMessage</code>,
-          só libera depois que o contato mandar mensagem primeiro — o que
-          torna disparo frio impossível por esse caminho. Os dois aparecem
-          nos flags da conexão, logo acima.
+          <br><br><strong>Onde mexer:</strong> painel do DigiSac, configuracoes
+          da conexao, regras de bloqueio de mensagem. Se nao aparecer la, e
+          pedido para o suporte deles — a funcionalidade nao esta no manual.
         {% endif %}
       </div>
       <div class="tabela-rolagem">

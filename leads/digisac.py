@@ -515,13 +515,18 @@ def diagnostico_conexao():
     ajustes = bruto.get("settings") if isinstance(bruto.get("settings"), dict) else {}
     for nome, recado in (
             ("blockMessageRulesActive",
-             "as regras de bloqueio de mensagem estao ativas -- elas retem "
-             "envio para quem nunca respondeu"),
+             "as regras de bloqueio de mensagem estao ativas nesta conexao"),
             ("unblockByReceiveMessage",
-             "o envio so e liberado depois que o contato responder")):
-        if ajustes.get(nome) is True:
+             "o envio so e liberado depois que o contato responder -- com "
+             "isso disparo para quem nunca falou antes nao sai")):
+        valor = ajustes.get(nome)
+        # Registra o valor mesmo quando False: quem le precisa distinguir
+        # "esta desligado" de "nao consegui ler", e guardar so o True
+        # tornava os dois casos identicos.
+        if isinstance(valor, bool):
+            flags[nome] = valor
+        if valor is True:
             ruins.append(recado)
-            flags[nome] = True
 
     return ruins, flags
 
@@ -697,10 +702,32 @@ def diagnosticar_contato(frio, bom):
         return "nenhum", ""
 
     if frio.get("canSend") is False:
-        return "bloqueado", (
-            "O DigiSac marcou este contato como nao-enviavel "
-            "(canSend: false). Nao e o numero e nao e o nosso codigo: e uma "
-            "regra da conexao no DigiSac barrando o envio para ele.")
+        # Ja consulta a conexao aqui: mandar a pessoa procurar o flag em
+        # outro lugar da tela, sabendo que da para perguntar, e empurrar
+        # trabalho para quem esta tentando resolver.
+        _p, flags = diagnostico_conexao()
+        regra = flags.get("blockMessageRulesActive")
+        so_apos_resposta = flags.get("unblockByReceiveMessage")
+
+        recado = ("O DigiSac marcou este contato como nao-enviavel "
+                  "(canSend: false). Nao e o numero e nao e o nosso codigo: "
+                  "e uma regra da conexao no DigiSac barrando o envio.")
+        if so_apos_resposta is True:
+            recado += (" E a conexao esta com 'liberar so apos o contato "
+                       "responder' ligado -- com isso disparo frio e "
+                       "impossivel por definicao: o lead nunca respondeu "
+                       "antes.")
+        elif regra is True:
+            recado += (" A conexao esta com as regras de bloqueio de "
+                       "mensagem ativas.")
+        elif regra is False and so_apos_resposta is False:
+            recado += (" Mas as duas regras de bloqueio aparecem DESLIGADAS "
+                       "nesta conexao -- entao o bloqueio vem de outro lugar "
+                       "no DigiSac, e e pergunta para o suporte deles.")
+        else:
+            recado += (" Nao consegui ler as regras da conexao para dizer "
+                       "qual delas e.")
+        return "bloqueado", recado
 
     if frio.get("block") or (frio.get("unsubscribed") is True):
         return "bloqueado", (
