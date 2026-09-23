@@ -634,9 +634,14 @@ def _existe_na_resposta(r):
 #
 # Comparar um lead frio com um contato que funciona e o teste que separa
 # "numero nao resolvido" de "WhatsApp restringindo envio para desconhecido".
-CAMPOS_CONTATO = ("idFromService", "jidId", "lidId", "valid", "validNumber",
-                  "canSend", "hadChat", "lastContactMessageAt", "block",
-                  "unsubscribed")
+CAMPOS_CONTATO = ("canSend", "idFromService", "jidId", "lidId", "valid",
+                  "validNumber", "hadChat", "lastContactMessageAt", "block",
+                  "unsubscribed",
+                  # Detalhe da regra de bloqueio: quando libera, ate quando
+                  # esta retido. Sao estes que dizem se da para esperar ou
+                  # se e preciso mexer na configuracao da conexao.
+                  "unblockUntilAt", "nextUnblockAt", "alertToBlockUntilAt",
+                  "unreadAlertToBlock")
 
 
 def ver_contato(numero):
@@ -679,9 +684,57 @@ def ver_contato(numero):
     return saida
 
 
+def diagnosticar_contato(frio, bom):
+    """Le a comparacao e diz, em portugues, o que ela significa.
+
+    canSend vem primeiro porque e o campo que decide: e o proprio DigiSac
+    marcando que aquele contato nao pode receber envio. Antes este
+    diagnostico so olhava idFromService e concluia "os dois estao iguais"
+    com um canSend False na tabela -- dizia o contrario do que os dados
+    mostravam.
+    """
+    if not frio and not bom:
+        return "nenhum", ""
+
+    if frio.get("canSend") is False:
+        return "bloqueado", (
+            "O DigiSac marcou este contato como nao-enviavel "
+            "(canSend: false). Nao e o numero e nao e o nosso codigo: e uma "
+            "regra da conexao no DigiSac barrando o envio para ele.")
+
+    if frio.get("block") or (frio.get("unsubscribed") is True):
+        return "bloqueado", (
+            "Este contato esta bloqueado ou descadastrado no proprio "
+            "DigiSac.")
+
+    if frio.get("unblockUntilAt") or frio.get("nextUnblockAt"):
+        return "retido", (
+            "O contato esta sob regra de bloqueio com prazo. Veja "
+            "unblockUntilAt / nextUnblockAt na tabela.")
+
+    if not frio.get("idFromService") and bom.get("idFromService"):
+        return "sem_jid", (
+            "O numero que nao recebe esta sem JID (idFromService vazio) e o "
+            "que recebe tem. A sessao nunca conseguiu resolver esse numero "
+            "no WhatsApp: o DigiSac cria a conversa e aceita a mensagem, mas "
+            "ela nao tem para onde ir -- fica em ack 0 para sempre.")
+
+    if frio.get("valid") is False or frio.get("validNumber") is False:
+        return "invalido", (
+            "O DigiSac marcou o numero como invalido.")
+
+    return "igual", (
+        "Os dois contatos estao com os mesmos campos relevantes. Se um "
+        "recebe e o outro nao, o cadastro nao explica -- sobra restricao do "
+        "WhatsApp para destinatario novo.")
+
+
 def comparar_contatos(numero_frio, numero_bom):
-    """(frio, bom, diferencas) -- o que muda entre um lead que nao recebe e
-    um numero que recebe. A lista de diferencas e o diagnostico."""
+    """(frio, bom, diferencas, tipo, recado) da comparacao.
+
+    diferencas lista campo a campo o que muda; tipo e recado sao a leitura
+    pronta, para a tela nao ter que interpretar campo de API.
+    """
     frio = ver_contato(numero_frio)
     bom = ver_contato(numero_bom)
     diferencas = []
@@ -689,7 +742,8 @@ def comparar_contatos(numero_frio, numero_bom):
         a, b = frio.get(campo), bom.get(campo)
         if a != b:
             diferencas.append((campo, a, b))
-    return frio, bom, diferencas
+    tipo, recado = diagnosticar_contato(frio, bom)
+    return frio, bom, diferencas, tipo, recado
 
 
 # ------------------------------------------------------------ webhook

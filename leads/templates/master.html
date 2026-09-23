@@ -439,19 +439,24 @@
         Não achei nenhum dos dois contatos no DigiSac. Confira os números.
       </div>
     {% else %}
-      {% set sem_jid = comparacao.frio and not comparacao.frio.idFromService
-                       and comparacao.bom and comparacao.bom.idFromService %}
-      <div class="alerta {{ 'alerta-erro' if sem_jid else 'alerta-aviso' }}">
-        {% if sem_jid %}
-          <strong>O número que não recebe está sem JID</strong>
-          (<code>idFromService</code> vazio) e o que recebe tem. Quer dizer
-          que a sessão nunca conseguiu resolver esse número no WhatsApp —
-          o DigiSac cria a conversa e aceita a mensagem, mas ela não tem
-          para onde ir. Fica em <code>ack 0</code> para sempre.
-        {% else %}
-          Os dois contatos têm os mesmos campos preenchidos. Se um recebe e o
-          outro não, o problema não é o cadastro do número — é o WhatsApp
-          restringindo envio para destinatário novo.
+      {# O recado vem pronto do Python. Antes a tela deduzia sozinha olhando
+         so idFromService, e concluia "os dois estao iguais" com um
+         canSend False na tabela logo abaixo -- dizia o contrario do que os
+         dados mostravam. #}
+      <div class="alerta {{ 'alerta-erro' if comparacao.tipo in
+                            ('bloqueado', 'sem_jid', 'invalido')
+                            else ('alerta-aviso' if comparacao.tipo
+                                  else 'alerta-info') }}">
+        {{ comparacao.recado }}
+        {% if comparacao.tipo == 'bloqueado' %}
+          <br><br>
+          <strong>O que fazer:</strong> no painel do DigiSac, confira as
+          regras de bloqueio de mensagem da conexão. Se
+          <code>blockMessageRulesActive</code> estiver ligado, ele barra
+          envio conforme a regra; com <code>unblockByReceiveMessage</code>,
+          só libera depois que o contato mandar mensagem primeiro — o que
+          torna disparo frio impossível por esse caminho. Os dois aparecem
+          nos flags da conexão, logo acima.
         {% endif %}
       </div>
       <div class="tabela-rolagem">

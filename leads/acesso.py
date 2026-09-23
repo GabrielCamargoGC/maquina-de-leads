@@ -577,12 +577,14 @@ def master_digisac_contatos():
         session["aviso_master"] = "Informe os dois numeros para comparar."
         return redirect(url_for("acesso.master"))
     try:
-        a, b, dif = digisac.comparar_contatos(frio, bom)
+        a, b, dif, tipo, recado = digisac.comparar_contatos(frio, bom)
         session["comparacao"] = {"frio": a, "bom": b, "diferencas": dif,
+                                 "tipo": tipo, "recado": recado,
                                  "n_frio": frio, "n_bom": bom}
     except Exception as e:
         session["comparacao"] = {"erro": str(e), "n_frio": frio, "n_bom": bom,
-                                 "frio": {}, "bom": {}, "diferencas": []}
+                                 "frio": {}, "bom": {}, "diferencas": [],
+                                 "tipo": "", "recado": ""}
     return redirect(url_for("acesso.master"))
 
 
