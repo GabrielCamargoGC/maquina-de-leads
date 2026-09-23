@@ -397,6 +397,7 @@ def master():
                    else (False, "nao configurado"),
         diagnostico=digisac.diagnostico_conexao() if digisac.configurado()
                     else ([], {}),
+        comparacao=session.pop("comparacao", None),
         env_arquivo=str(config.ARQUIVO_ENV),
         env_existe=config.ARQUIVO_ENV.is_file(),
         env_carregadas=config.contar_env(),
@@ -555,6 +556,33 @@ def master_digisac_reiniciar():
         auditoria.DIGISAC_TESTADO,
         usuario=(usuario_atual() or {}).get("usuario", ""), ip=_ip(),
         resultado="reinicio de conexao")
+    return redirect(url_for("acesso.master"))
+
+
+@bp.route("/master/digisac/contatos", methods=["POST"])
+@exigir_master
+def master_digisac_contatos():
+    """Compara um lead que nao recebe com um numero que recebe.
+
+    E o teste que separa as duas explicacoes que sobraram para "mensagem
+    unica funciona, disparo frio nao": o numero nunca foi resolvido pelo
+    WhatsApp (sem JID, sem para onde mandar) ou o WhatsApp esta restringindo
+    envio para destinatario novo. No primeiro caso o contato frio vem sem
+    idFromService; no segundo vem igual ao que funciona.
+    """
+    conferir_csrf()
+    frio = (request.form.get("frio") or "").strip()
+    bom = (request.form.get("bom") or "").strip()
+    if not frio or not bom:
+        session["aviso_master"] = "Informe os dois numeros para comparar."
+        return redirect(url_for("acesso.master"))
+    try:
+        a, b, dif = digisac.comparar_contatos(frio, bom)
+        session["comparacao"] = {"frio": a, "bom": b, "diferencas": dif,
+                                 "n_frio": frio, "n_bom": bom}
+    except Exception as e:
+        session["comparacao"] = {"erro": str(e), "n_frio": frio, "n_bom": bom,
+                                 "frio": {}, "bom": {}, "diferencas": []}
     return redirect(url_for("acesso.master"))
 
 

@@ -404,6 +404,77 @@
     </div>
   </form>
 
+  {# Comparar um lead que nao recebe com um numero que recebe.
+     Separa "o WhatsApp nunca resolveu esse numero" (contato frio sem
+     idFromService) de "o WhatsApp esta restringindo envio para
+     desconhecido" (contato frio identico ao que funciona). #}
+  <h3 style="margin:24px 0 10px;font-size:15px">Comparar dois contatos</h3>
+  <form method="post" action="{{ url_for('acesso.master_digisac_contatos') }}"
+        data-espera="Consultando os dois contatos no DigiSac.">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="linha-form">
+      <div class="campo medio">
+        <label for="c_frio">Número que NÃO recebe</label>
+        <input class="entrada" id="c_frio" name="frio" inputmode="numeric"
+               placeholder="5518996093881">
+        <span class="dica">um lead com mensagem parada</span>
+      </div>
+      <div class="campo medio">
+        <label for="c_bom">Número que recebe</label>
+        <input class="entrada" id="c_bom" name="bom" inputmode="numeric"
+               placeholder="5518999999999">
+        <span class="dica">o seu, que funcionou no teste</span>
+      </div>
+    </div>
+    <div class="acoes">
+      <button type="submit" class="secundario">Comparar</button>
+    </div>
+  </form>
+
+  {% if comparacao %}
+    {% if comparacao.erro %}
+      <div class="alerta alerta-erro">{{ comparacao.erro }}</div>
+    {% elif not comparacao.frio and not comparacao.bom %}
+      <div class="alerta alerta-aviso">
+        Não achei nenhum dos dois contatos no DigiSac. Confira os números.
+      </div>
+    {% else %}
+      {% set sem_jid = comparacao.frio and not comparacao.frio.idFromService
+                       and comparacao.bom and comparacao.bom.idFromService %}
+      <div class="alerta {{ 'alerta-erro' if sem_jid else 'alerta-aviso' }}">
+        {% if sem_jid %}
+          <strong>O número que não recebe está sem JID</strong>
+          (<code>idFromService</code> vazio) e o que recebe tem. Quer dizer
+          que a sessão nunca conseguiu resolver esse número no WhatsApp —
+          o DigiSac cria a conversa e aceita a mensagem, mas ela não tem
+          para onde ir. Fica em <code>ack 0</code> para sempre.
+        {% else %}
+          Os dois contatos têm os mesmos campos preenchidos. Se um recebe e o
+          outro não, o problema não é o cadastro do número — é o WhatsApp
+          restringindo envio para destinatário novo.
+        {% endif %}
+      </div>
+      <div class="tabela-rolagem">
+        <table>
+          <thead><tr><th>Campo</th><th>{{ comparacao.n_frio }} (não recebe)</th>
+                     <th>{{ comparacao.n_bom }} (recebe)</th></tr></thead>
+          <tbody>
+          {% for campo, a, b in comparacao.diferencas %}
+            <tr>
+              <td><code>{{ campo }}</code></td>
+              <td class="fantasia">{{ a if a is not none else '—' }}</td>
+              <td class="fantasia">{{ b if b is not none else '—' }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3" class="fantasia">
+              Nenhuma diferença entre os dois.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  {% endif %}
+
   {# Eventos crus do webhook. E instrumento de conferencia: prova que o
      DigiSac esta chamando de volta, e mostra o formato exato do corpo --
      que e o que falta para parar de adivinhar o mapeamento. #}

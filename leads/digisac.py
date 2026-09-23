@@ -625,6 +625,73 @@ def _existe_na_resposta(r):
     return None
 
 
+# Campos do contato que dizem se o WhatsApp reconheceu aquele numero.
+#
+# idFromService e o JID -- o endereco do contato dentro do WhatsApp. Vazio
+# significa que a sessao nunca conseguiu resolver o numero: o DigiSac cria o
+# contato e a conversa localmente, aceita o POST, devolve 200, e a mensagem
+# fica em ack 0 para sempre porque nao tem para onde ir.
+#
+# Comparar um lead frio com um contato que funciona e o teste que separa
+# "numero nao resolvido" de "WhatsApp restringindo envio para desconhecido".
+CAMPOS_CONTATO = ("idFromService", "jidId", "lidId", "valid", "validNumber",
+                  "canSend", "hadChat", "lastContactMessageAt", "block",
+                  "unsubscribed")
+
+
+def ver_contato(numero):
+    """Campos do contato daquele numero, ou {} se nao achar.
+
+    Nao levanta: e diagnostico, e falhar aqui nao pode atrapalhar quem esta
+    tentando entender por que a campanha nao sai.
+    """
+    n = "".join(c for c in str(numero or "") if c.isdigit())
+    if not configurado() or not n:
+        return {}
+
+    achado = None
+    for caminho in (
+            f"/contacts?where[data.number][$iLike]=%{n}%"
+            f"&where[serviceId]={config.DIGISAC_SERVICE_ID}",
+            f"/contacts?where[data.number]={n}",
+            f"/contacts?number={n}"):
+        try:
+            r = _chamar(caminho, metodo="GET")
+        except ErroDigiSac:
+            continue
+        itens = r if isinstance(r, list) else (
+            (r or {}).get("data") or (r or {}).get("items") or [])
+        if isinstance(itens, dict):
+            itens = [itens]
+        if itens:
+            achado = itens[0]
+            break
+    if not isinstance(achado, dict):
+        return {}
+
+    saida = {"id": achado.get("id") or ""}
+    for campo in CAMPOS_CONTATO:
+        v = _cavar(achado, (campo, campo.lower()))
+        if v is None:
+            v = _achar_booleano(achado, campo)
+        saida[campo] = v
+    saida["_bruto"] = json.dumps(achado, ensure_ascii=False)[:1500]
+    return saida
+
+
+def comparar_contatos(numero_frio, numero_bom):
+    """(frio, bom, diferencas) -- o que muda entre um lead que nao recebe e
+    um numero que recebe. A lista de diferencas e o diagnostico."""
+    frio = ver_contato(numero_frio)
+    bom = ver_contato(numero_bom)
+    diferencas = []
+    for campo in CAMPOS_CONTATO:
+        a, b = frio.get(campo), bom.get(campo)
+        if a != b:
+            diferencas.append((campo, a, b))
+    return frio, bom, diferencas
+
+
 # ------------------------------------------------------------ webhook
 
 
