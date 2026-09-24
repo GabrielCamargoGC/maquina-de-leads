@@ -225,6 +225,9 @@ class FormFiltros:
 def _comum(pagina):
     return {
         "pagina": pagina,
+        # Some a aba e os botoes de disparo quando a funcionalidade esta
+        # desligada. O codigo fica; a navegacao, nao.
+        "disparo_ativo": config.DISPARO_ATIVO,
         "base_pronta": busca.base_pronta(),
         "info_base": estado.ler(),
     }
@@ -487,6 +490,17 @@ def baixar_refinado(ident, formato):
 # ------------------------------------------------------------ disparo
 
 
+def _disparo_ligado():
+    """404 quando o disparo esta desligado.
+
+    404 e nao 403: a rota nao existe para quem esta com a funcionalidade
+    fora, e quem chegar por link antigo ve a pagina de erro normal em vez de
+    descobrir que ha algo escondido.
+    """
+    if not config.DISPARO_ATIVO:
+        abort(404)
+
+
 def _minutos(segundos):
     if segundos < 90:
         return f"{segundos}s"
@@ -498,6 +512,7 @@ def _minutos(segundos):
 
 @app.route("/disparo")
 def tela_disparo():
+    _disparo_ligado()
     return render_template(
         "disparo.html", **dict(_comum("disparo"),
                                campanhas=campanha.listar(30),
@@ -513,6 +528,7 @@ def disparo_nova():
     clique na tela da campanha -- disparo de horas nao sai de um botao so,
     porque o erro nao tem volta depois do primeiro envio.
     """
+    _disparo_ligado()
     f = FormFiltros(request.form if request.method == "POST" else request.args)
     fonte = (request.values.get("fonte") or "busca").strip()
     ctx = dict(_comum("disparo"), f=f, query=f.query(), fonte=fonte,
@@ -570,6 +586,7 @@ def disparo_nova():
 
 @app.route("/disparo/<ident>")
 def disparo_ver(ident):
+    _disparo_ligado()
     c = campanha.ver(ident)
     if not c:
         return render_template("erro.html", codigo=404, nome="Campanha nao encontrada",
@@ -595,6 +612,7 @@ def disparo_ver(ident):
 
 @app.route("/disparo/<ident>/acao", methods=["POST"])
 def disparo_acao(ident):
+    _disparo_ligado()
     acesso.conferir_csrf()
     acao = request.form.get("acao")
     usuario = (acesso.usuario_atual() or {}).get("usuario", "")
@@ -625,6 +643,7 @@ def disparo_conferir(ident):
     DigiSac responder que a mensagem esta pendente, o envio saiu daqui e
     travou la -- e isso e o que se leva para o suporte deles.
     """
+    _disparo_ligado()
     acesso.conferir_csrf()
     if not campanha.ver(ident):
         return redirect(url_for("tela_disparo"))
@@ -767,7 +786,10 @@ def criar_app():
     exportar.iniciar_workers()
     exportar.iniciar_faxina()
     # Retoma campanha que ficou pela metade quando o servico caiu.
-    campanha.iniciar_worker()
+    # Com o disparo desligado o worker nem sobe: campanha parada no meio
+    # nao pode voltar a mandar sozinha so porque o servico reiniciou.
+    if config.DISPARO_ATIVO:
+        campanha.iniciar_worker()
     return app
 
 

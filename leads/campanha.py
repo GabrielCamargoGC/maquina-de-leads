@@ -132,10 +132,20 @@ def registrar_bruto(corpo, ev=None):
 
 
 def listar_brutos(limite=20):
+    """Ultimos eventos crus. Lista vazia se a tabela ainda nao existe.
+
+    Pode ser chamado antes de qualquer campanha ter rodado -- com o disparo
+    desligado o worker nem sobe, e entao criar_tabelas nunca aconteceu. Uma
+    tela de diagnostico nao pode derrubar o painel por causa disso.
+    """
     con = _con()
-    r = con.execute("SELECT * FROM webhook_bruto ORDER BY id DESC LIMIT ?",
-                    (limite,)).fetchall()
-    con.close()
+    try:
+        r = con.execute("SELECT * FROM webhook_bruto ORDER BY id DESC LIMIT ?",
+                        (limite,)).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    finally:
+        con.close()
     return [dict(x) for x in r]
 
 
@@ -249,6 +259,8 @@ def enviados_hoje():
         return con.execute(
             "SELECT count(*) AS n FROM envio WHERE quando >= ? AND status <> ?",
             (date.today().isoformat(), NA_FILA)).fetchone()["n"]
+    except sqlite3.OperationalError:
+        return 0                      # tabela ainda nao existe: nada saiu
     finally:
         con.close()
 

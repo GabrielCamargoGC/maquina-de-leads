@@ -36,8 +36,10 @@
            quente que existe nesta base, e era o unico lugar sem o botao.
            fonte=novidades faz a montagem da campanha usar a comparacao entre
            as duas bases, e nao a busca normal. #}
+        {% if disparo_ativo %}
         <a class="botao secundario"
            href="{{ url_for('disparo_nova', fonte='novidades', **query) }}">Disparar</a>
+        {% endif %}
         {% endif %}
       </div>
       {% if aproximado %}

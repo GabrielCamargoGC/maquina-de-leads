@@ -223,6 +223,18 @@ SITE_URL = os.environ.get("LEADS_SITE_URL", "https://zebrahads.com.br").rstrip("
 DISPARO_PAUSA_MIN = float(os.environ.get("LEADS_DISPARO_PAUSA_MIN", "3"))
 DISPARO_PAUSA_MAX = float(os.environ.get("LEADS_DISPARO_PAUSA_MAX", "6"))
 
+# Disparo de WhatsApp: desligado por padrao.
+#
+# O motor inteiro continua no codigo, com testes, tabelas e historico -- so
+# nao aparece no site. O canal se mostrou imprevisivel na pratica (mensagem
+# aceita pela API e nunca entregue, sem erro) e sem resultado (zero respostas
+# no que chegou), entao nao vale ocupar espaco na navegacao de quem usa a
+# ferramenta todo dia.
+#
+# Para voltar a ligar: LEADS_DISPARO=1 no .env do servidor e reiniciar. Nada
+# mais precisa ser mexido -- rotas, telas e o worker voltam juntos.
+DISPARO_ATIVO = os.environ.get("LEADS_DISPARO", "0") in ("1", "sim", "true", "on")
+
 # Teto por campanha. Trava de seguranca contra o erro de mandar para a
 # cidade inteira sem perceber.
 DISPARO_MAX_DESTINOS = int(os.environ.get("LEADS_DISPARO_MAX", "5000"))

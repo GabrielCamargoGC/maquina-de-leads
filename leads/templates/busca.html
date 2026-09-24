@@ -32,8 +32,10 @@
         {# Disparo sai da mesma busca, sem baixar nada no meio. Fora do form
            acima porque aquele e POST de export; este e GET para a tela de
            montar campanha. #}
+        {% if disparo_ativo %}
         <a class="botao secundario"
            href="{{ url_for('disparo_nova', **query) }}">Disparar</a>
+        {% endif %}
         {% endif %}
       </div>
       {% if total > linhas|length %}

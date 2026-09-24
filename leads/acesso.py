@@ -365,12 +365,49 @@ def sair():
 # ------------------------------------------------------------ painel master
 
 
+def _contexto_disparo():
+    """Contexto do cartao de Disparo, so quando ele aparece.
+
+    Com a funcionalidade desligada, nada disso e calculado: eram consultas a
+    tabelas que so existem quando o motor roda (e o painel quebrava com 500
+    numa instalacao nova) e chamadas a API do DigiSac a cada abertura do
+    painel, para desenhar um cartao que nem vai para a tela.
+    """
+    if not config.DISPARO_ATIVO:
+        return {}
+    return {
+        # Webhook e DigiSac: a URL sai daqui pronta para colar no painel
+        # deles, e o segredo nunca precisa passar por conversa nenhuma.
+        "webhook_url": digisac.url_webhook(),
+        "digisac_ok": digisac.configurado(),
+        "digisac_teste": session.pop("digisac_teste", None),
+        "webhook_eventos": campanha.listar_brutos(10),
+        "aquecimento": campanha.situacao_aquecimento(),
+        "conexao": (digisac.estado_conexao() if digisac.configurado()
+                    else (False, "nao configurado")),
+        "service_ok": (digisac.conferir_service_id() if digisac.configurado()
+                       else (False, "nao configurado")),
+        "diagnostico": (digisac.diagnostico_conexao() if digisac.configurado()
+                        else ([], {})),
+        "comparacao": session.pop("comparacao", None),
+        "env_arquivo": str(config.ARQUIVO_ENV),
+        "env_existe": config.ARQUIVO_ENV.is_file(),
+        "env_carregadas": config.contar_env(),
+        "tem_sub": bool(config.DIGISAC_SUBDOMINIO),
+        "tem_token": bool(config.DIGISAC_TOKEN),
+        "tem_service": bool(config.DIGISAC_SERVICE_ID),
+        "sub_atual": config.DIGISAC_SUBDOMINIO,
+        "service_atual": config.DIGISAC_SERVICE_ID,
+    }
+
+
 @bp.route("/master")
 @exigir_master
 def master():
     return render_template(
         "master.html",
         pagina="master",
+        disparo_ativo=config.DISPARO_ATIVO,
         maquina=saude.coletar(),
         codigo_situacao=atualizar_codigo.situacao(),
         tarefa=tarefas.estado(),
@@ -384,29 +421,7 @@ def master():
         senha_gerada=session.pop("senha_gerada", None),
         codigos_gerados=session.pop("codigos_gerados", None),
         aviso=session.pop("aviso_master", None),
-        # Webhook e DigiSac: a URL sai daqui pronta para colar no painel
-        # deles, e o segredo nunca precisa passar por conversa nenhuma.
-        webhook_url=digisac.url_webhook(),
-        digisac_ok=digisac.configurado(),
-        digisac_teste=session.pop("digisac_teste", None),
-        webhook_eventos=campanha.listar_brutos(10),
-        aquecimento=campanha.situacao_aquecimento(),
-        conexao=digisac.estado_conexao() if digisac.configurado()
-                else (False, "nao configurado"),
-        service_ok=digisac.conferir_service_id() if digisac.configurado()
-                   else (False, "nao configurado"),
-        diagnostico=digisac.diagnostico_conexao() if digisac.configurado()
-                    else ([], {}),
-        comparacao=session.pop("comparacao", None),
-        env_arquivo=str(config.ARQUIVO_ENV),
-        env_existe=config.ARQUIVO_ENV.is_file(),
-        env_carregadas=config.contar_env(),
-        tem_sub=bool(config.DIGISAC_SUBDOMINIO),
-        tem_token=bool(config.DIGISAC_TOKEN),
-        tem_service=bool(config.DIGISAC_SERVICE_ID),
-        sub_atual=config.DIGISAC_SUBDOMINIO,
-        service_atual=config.DIGISAC_SERVICE_ID,
-        conexoes=session.pop("digisac_conexoes", None),
+        **_contexto_disparo()
     )
 
 

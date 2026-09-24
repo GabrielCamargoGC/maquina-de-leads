@@ -113,6 +113,9 @@
 {# Cartao do DigiSac. A URL do webhook nasce aqui em vez de ser combinada
    por conversa: o segredo dela e gerado no servidor e nunca precisa passar
    por chat, e-mail ou bilhete. #}
+{# Cartao inteiro atras do flag: com o disparo desligado, nada dele
+   aparece -- nem credenciais, nem webhook, nem diagnostico. #}
+{% if disparo_ativo %}
 <div class="card">
   <h2>Disparo de WhatsApp</h2>
 
@@ -529,6 +532,7 @@
     </p>
   {% endif %}
 </div>
+{% endif %}
 
 {% if senha_gerada %}
   <div class="card">
